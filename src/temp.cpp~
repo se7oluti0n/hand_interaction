@@ -1,0 +1,26 @@
+#include <boost/thread/thread.hpp>
+#include <boost/thread/mutex.hpp>
+#include <boost/thread/condition.hpp>
+#include <Eigen/StdVector>
+#include <ros/ros.h>
+#include <body_msgs/Skeletons.h>
+#include <sensor_msgs/PointCloud.h>
+#include <body_msgs/Hands.h>
+#include <sensor_msgs/point_cloud_conversion.h>
+#include <pcl_tools/pcl_utils.h>
+//#include <pcl_tools/segfast.hpp>
+#include "pcl/common/transform.hpp"
+#include "pcl/io/pcd_io.h"
+#include "pcl/point_types.h"
+#include <pcl/ModelCoefficients.h>
+
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+
+#include <sstream>
+#include <iostream>
+#include <fstream>
+#include <cstdlib>
+
+using namespace std;
+

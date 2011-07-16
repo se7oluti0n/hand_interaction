@@ -1,0 +1,17 @@
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/mit-ros-pkg/!svn/ver/899/trunk/kinect_utils/hand_interaction/launch
+END
+finger_detector.launch
+K 25
+svn:wc:ra_dav:version-url
+V 91
+/mit-ros-pkg/!svn/ver/899/trunk/kinect_utils/hand_interaction/launch/finger_detector.launch
+END
+hand_detector.launch
+K 25
+svn:wc:ra_dav:version-url
+V 89
+/mit-ros-pkg/!svn/ver/899/trunk/kinect_utils/hand_interaction/launch/hand_detector.launch
+END

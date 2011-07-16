@@ -1,0 +1,23 @@
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/mit-ros-pkg/!svn/ver/899/trunk/kinect_utils/hand_interaction/src
+END
+analyze_hands.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 83
+/mit-ros-pkg/!svn/ver/870/trunk/kinect_utils/hand_interaction/src/analyze_hands.cpp
+END
+detect_hands.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 82
+/mit-ros-pkg/!svn/ver/899/trunk/kinect_utils/hand_interaction/src/detect_hands.cpp
+END
+detect_hands_wskel.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 88
+/mit-ros-pkg/!svn/ver/899/trunk/kinect_utils/hand_interaction/src/detect_hands_wskel.cpp
+END
