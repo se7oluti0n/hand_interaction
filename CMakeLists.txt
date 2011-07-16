@@ -50,6 +50,6 @@ target_link_libraries(predict pcl_utils)
 rosbuild_add_executable(predict2 src/predict2.cpp src/svm.cpp)
 target_link_libraries(predict2 pcl_utils)
 
-rosbuild_add_executable(testty src/temp.cpp )
-target_link_libraries(testty pcl_utils)
+
+
 

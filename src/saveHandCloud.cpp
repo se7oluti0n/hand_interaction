@@ -114,7 +114,7 @@ public:
     std::stringstream filename;
     pcl::PointCloud<pcl::PointXYZ> handcloud;
     pcl::fromROSMsg( cloud, handcloud);
-    /*filename.str("");
+    filename.str("");
     filename << name << "/" << setfill('0') << setw(4) << count << ".pcd";
     pcl::io::savePCDFileASCII( filename.str().c_str(), handcloud);
 
@@ -123,14 +123,15 @@ public:
     saveSkeletonsFileASCII( filename.str().c_str(), skels.skeletons[0]);
 
     filename.str("");
-    filename << name << "/" << setfill('0') << setw(4) << count << ".jpg";*/
+    filename << name << "/" << setfill('0') << setw(4) << count << ".jpg";
     cv_bridge::CvImageConstPtr imgptr;
 
     imgptr = cv_bridge::toCvShare( imgmsg, enc::BGR8);
-    cv::Mat img = imgptr->image.clone();
+    cv::imwrite(filename.str().c_str(), imgptr->image);
+    //cv::Mat img = imgptr->image.clone();
     // imageHandDetect(img, );
 
-    float constant = 1.90476e-03;
+    /* float constant = 1.90476e-03;
     float centerX = 319.5;
     float centerY = 239.5;
     float radius = 0.1;
@@ -173,12 +174,12 @@ public:
     
     cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,255,0), 2);
     cv::circle( dst, cv::Point((int)( xx1.at<float>(0,0) + centerX),(int) ( xx1.at<float>(1,0)) + centerY) , r, cv::Scalar(0,0,255), 2);
-    cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0));
-    //cv::imwrite(filename.str().c_str(), img);
-    cv::imshow("Hand Detect", img);
+    cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0));*/
+   
+    /*cv::imshow("Hand Detect", img);
     cv::imshow("Rotation", dst);
     cv::waitKey(20);
-    std::cout << count << " "  <<  lastskelseq << " " << lastcloudseq << endl;
+    std::cout << count << " "  <<  lastskelseq << " " << lastcloudseq << endl;*/
     count++;
    
 
