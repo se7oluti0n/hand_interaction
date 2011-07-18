@@ -76,6 +76,14 @@ public:
 
 
   }
+
+
+  /** \fn void saveSkeletonFileASCII ( const char * fname, body_msgs::Skeleton skels
+   *  \brief Save a skeleton data \a skels to a ASCII file named \a fname
+   *  \param fname File name
+   *  \param skels Skeleton data struct
+   *
+   */
   void saveSkeletonsFileASCII( const char * fname, body_msgs::Skeleton skels)
   {
     ofstream out(fname);
@@ -184,14 +192,25 @@ public:
    
 
   }
-  
+  /**************************************************************************
+    Image Subscriber Callback
+     
+
+
+  /**************************************************************************/ 
   void imgcb( const sensor_msgs::ImageConstPtr & img)
   {
     imgmsg = img;
     messageSync();
 
   }
-  
+  /** \fn void cloudcb
+   *  \brief hand point cloud subscriber callback
+   *
+   *
+   */
+
+
   void cloudcb( const sensor_msgs::PointCloud2ConstPtr &scan )
   {
     /*if ( scan)
