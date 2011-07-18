@@ -35,6 +35,9 @@ target_link_libraries(analyzehands pcl_utils)
 rosbuild_add_executable(training src/training.cpp)
 target_link_libraries(training pcl_utils)
 
+rosbuild_add_executable(dm src/resampling.cpp)
+target_link_libraries(dm pcl_utils)
+
 rosbuild_add_executable(detectskelhands src/detect_hands_wskel.cpp)
 target_link_libraries(detectskelhands pcl_utils)
 
@@ -49,7 +52,6 @@ target_link_libraries(predict pcl_utils)
 
 rosbuild_add_executable(predict2 src/predict2.cpp src/svm.cpp)
 target_link_libraries(predict2 pcl_utils)
-
 
 
 
