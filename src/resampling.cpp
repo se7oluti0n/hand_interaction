@@ -33,6 +33,10 @@ int
   string name;
   cout << "Input filename : " ;
   cin >> name;
+  float radius;
+  cout << "Search radius: " ;
+  cin >> radius;
+  
   // Load input file into a PointCloud<T> with an appropriate type
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ> ());
   sensor_msgs::PointCloud2 cloud_blob;
@@ -58,7 +62,7 @@ int
   mls.setInputCloud (cloud);
   mls.setPolynomialFit (true);
   mls.setSearchMethod (tree);
-  mls.setSearchRadius (0.03);
+  mls.setSearchRadius (radius);
 
   // Reconstruct
   mls.reconstruct (mls_points);
