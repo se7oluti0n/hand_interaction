@@ -49,7 +49,7 @@ struct HandSaver
   body_msgs::Skeletons skelmsg;
   sensor_msgs::ImageConstPtr imgmsg;
 
-  struct svm_node *x;
+  struct svm_node x[4][201];
   int max_nr_attr;
   
   struct svm_model *model;
@@ -90,7 +90,7 @@ public:
       }
 
      
-      x = ( struct svm_node *) malloc ( 300 * sizeof(struct svm_node));
+      // x = ( struct svm_node *) malloc ( 300 * sizeof(struct svm_node));
 
       	if(predict_probability)
 	{
@@ -182,10 +182,10 @@ public:
      Eigen::Vector3f right_arm, zvector, cross;
 
   right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
-  right_arm[1] = 0; //armin.right_hand.position.y - armin.right_elbow.position.y;
+  right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
   right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
 
-  zvector[0] = 0;
+  /*  zvector[0] = 0;
   zvector[1] = 0;
   zvector[2] = 1;
 
@@ -196,7 +196,7 @@ public:
   double tann = right_arm[0] / right_arm[2];
   
   right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
-     pcl::compute3DCentroid (cloud, centroid);
+  */ pcl::compute3DCentroid (cloud, centroid);
      pcl::computeCovarianceMatrixNormalized(cloud,centroid,cov);
      pcl::eigen33 (cov, eigen_vectors, eigen_values);
 
@@ -214,10 +214,14 @@ public:
     origin [ 2 ] = centroid[2];
     */
 
+    	y_axis[0] = eigen_vectors( 0, 0);
+	y_axis[1] = eigen_vectors( 1, 0);
+	y_axis[2] = eigen_vectors( 2, 0);
+     
     double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
    if ( cos < 0 ) z_axis = - z_axis;
    // cout << " tan: "<< tann ;
-    if ( tann <= -3.7 || tann >= 3.7 ) 
+   /*  if ( tann <= -3.7 || tann >= 3.7 ) 
       {
 	y_axis[0] = eigen_vectors( 0, 1);
 	y_axis[1] = eigen_vectors( 1, 1);
@@ -270,7 +274,7 @@ public:
    // r /= 4;
 
       
-    float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
+   /* float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
     float r2 = min_pt.y * min_pt.y + min_pt.x * min_pt.x;
     float r3 = max_pt.y * max_pt.y + min_pt.x * min_pt.x;
     float r4 = min_pt.y * min_pt.y + max_pt.x * max_pt.x;
@@ -280,18 +284,19 @@ public:
     float r = r1 > r2?r1:r2;
     r = r > r3?r:r3;
     r = r > r4?r:r4;
-
+   */
     
+   float r = 0.1;
     float offset_r = r / 4.999;
     origin[2] = min_pt.z;
     
-    float offset_z = (max_pt.z - min_pt.z) / 5.999;
+    float offset_z = 0.2 / 4.999;
     const double PI = 3.141592;
     float offset_a = PI / 3.999;
 
-    float histogram[240];
-    for ( int i = 0; i < 240; i++ )
-      
+    float histogram[4][200];
+    /* for ( int i = 0; i < 240; i++ )
+    
       {
 	histogram[i] = 0.0;
 	//	cout << histogram[i];
@@ -316,7 +321,60 @@ public:
       x[i].value = histogram[i];
       // tcout << histogram[i] << endl;
     }
-     x[240].index = -1;
+    */
+         for (int j = 0; j < 4; j++ )
+    for ( int i = 0; i < 200; i++ )
+      
+      {
+	histogram[j][i] = 0.0;
+	//	cout << histogram[i];
+      }
+     for ( int i = 0; i < output.points.size(); i++ )
+      {
+	int zz = floor (( output.points[i].z - origin[2] ) / offset_z);
+	int pp = floor (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
+	int aa = floor(( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
+
+        int index = zz * 40 + pp * 8 + aa;
+	if ( index < 0 || index > 199 ) 
+	  {
+	    cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;
+	    exit(1);
+	  }
+	histogram[0][index] += 1.0;
+
+	index = zz * 40 + pp * 8 + ( aa + 2 ) / 8;
+
+	histogram[1][index] += 1.0;
+
+	index = zz * 40 +  pp * 8  + ( aa + 4 ) / 8;
+	
+	histogram[2][index] += 1.0;
+
+	index = zz * 40 +  pp * 8  + ( aa + 6 ) / 8;
+	
+	histogram[3][index] += 1.0;
+      }
+
+     for ( int j = 0; j < 4; j++ )
+     for ( int i = 0; i < 200; i++ )
+    {
+      histogram[j][i] /= (float) output.points.size();
+      x[j][i].index = i+1;
+      x[j][i].value = histogram[j][i];
+     
+
+
+     
+      // tcout << histogram[i] << endl;
+    }
+   
+
+     x[0][200].index = -1;
+      x[1][200].index = -1;
+      x[2][200].index = -1;
+       x[3][200].index = -1;
+     
 
 
   }
@@ -328,9 +386,11 @@ public:
      
     double predict_label;
     int kq;
-   if (predict_probability && (svm_type==C_SVC || svm_type==NU_SVC))
-     {
-			predict_label = svm_predict_probability(model,x,prob_estimates);
+    for ( int i = 0; i < 4; i++ )
+      {
+	if (predict_probability && (svm_type==C_SVC || svm_type==NU_SVC))
+	  {
+			predict_label = svm_predict_probability(model,x[i],prob_estimates);
 			/*	fprintf(output,"%g",predict_label);
 			for(j=0;j<nr_class;j++)
 				fprintf(output," %g",prob_estimates[j]);
@@ -343,6 +403,7 @@ public:
 				  {
 				    cout << "THIS IS YUBISHASHI !!!!! Prob:  " << prob_estimates[1] << endl << endl;
 				    kq = 1;
+				    break;
 				  }
 			else 
 			  {
@@ -351,9 +412,9 @@ public:
 			  }
 		     
 		}
-    else
+	else
 		{
-			predict_label = svm_predict(model,x);
+			predict_label = svm_predict(model,x[i]);
 			//	fprintf(output,"%g\n",predict_label);	fprintf(output,"%g\n",predict_label);
 
 				cout << predict_label ;
@@ -361,6 +422,7 @@ public:
 				  {
 				    cout << " Yubisashi da !!!!!" << endl << endl;
 				    kq = 1;
+				    break;
 				  }
 			else 
 			  {
@@ -369,6 +431,7 @@ public:
 			  }
 		}
 
+      }
    return kq;
   }
   void ProcessData( body_msgs::Skeletons skels, sensor_msgs::PointCloud2 cloud)

@@ -188,6 +188,7 @@ public:
     cv::imshow("Rotation", dst);
     cv::waitKey(20);
     std::cout << count << " "  <<  lastskelseq << " " << lastcloudseq << endl;*/
+    std::cout << "Wrote file : " << count << endl;
     count++;
    
 
