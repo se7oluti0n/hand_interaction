@@ -21,7 +21,8 @@
 #include <iostream>
 #include <fstream>
 #include <cstdlib>
-
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/surface/mls.h>
 using namespace std;
 
 /*void getTransFromUnitVectorsZY(const Eigen::Vector3f& z_axis, const Eigen::Vector3f& y_direction, Eigen::Affine3f& transformation)
@@ -59,7 +60,36 @@ struct arms
   body_msgs::SkeletonJoint right_hand;
   body_msgs::SkeletonJoint right_elbow;
 };
+void resampling( pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud,  pcl::PointCloud<pcl::PointXYZ> &mls_points)
+{
+  pcl::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::KdTreeFLANN<pcl::PointXYZ>);
+  tree->setInputCloud (cloud);
 
+  // Output has the same type as the input one, it will be only smoothed
+  //pcl::PointCloud<pcl::PointXYZ> mls_points;
+
+  // Init object (second point type is for the normals, even if unused)
+  pcl::MovingLeastSquares<pcl::PointXYZ, pcl::Normal> mls;
+
+  // Optionally, a pointer to a cloud can be provided, to be set by MLS
+  pcl::PointCloud<pcl::Normal>::Ptr mls_normals (new pcl::PointCloud<pcl::Normal> ());
+  mls.setOutputNormals (mls_normals);
+
+  // Set parameters
+  mls.setInputCloud (cloud);
+  mls.setPolynomialFit (true);
+  mls.setSearchMethod (tree);
+  mls.setSearchRadius (0.03);
+
+  // Reconstruct
+  mls.reconstruct (mls_points);
+
+  // Concatenate fields for saving
+  pcl::PointCloud<pcl::PointNormal> mls_cloud;
+  pcl::concatenateFields (mls_points, *mls_normals, mls_cloud);
+
+
+}
 void readJointFile(char *name, arms &a)
 {
   ifstream in(name);
@@ -205,16 +235,22 @@ int main(int argc, char ** argv)
   ofstream out("trainingdata.txt");
   while ( ! pcdin.eof() )
   {
+ 
+    pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud (new pcl::PointCloud<pcl::PointXYZ> ());
+     sensor_msgs::PointCloud2 cloud_blob;
+  // Load bun0.pcd -- should be available with the PCL archive in test 
+ 
     cout << "Start processing file " << count << endl;
     char name[256];
    pcdin.getline( name, 256 );
     
-   if ( pcl::io::loadPCDFile( name, cloud ) == -1 )
+   if ( pcl::io::loadPCDFile( name, cloud_blob ) == -1 )
      {
        // PCL_ERROR ("Couldn't read file test_pcd.pcd \n");
        break;
      }
-   
+    pcl::fromROSMsg (cloud_blob, *in_cloud);
+    resampling( in_cloud, cloud);
    skelin.getline( name, 256 );
 
    arms aa;
