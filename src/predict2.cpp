@@ -336,6 +336,7 @@ public:
 	int pp = floor (sqrt( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
 	int aa = floor(( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
 
+	zz = ( zz < 5) ? zz : 4;
 	pp = ( pp < 5 ) ? pp : 4;
         int index = zz * 40 + pp * 8 + aa;
 	if ( index < 0 || index > 199 ) 
