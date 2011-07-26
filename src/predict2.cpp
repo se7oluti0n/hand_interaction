@@ -256,9 +256,9 @@ public:
     */
     
 
-    origin [ 0 ] = skel.right_hand.position.x;
-    origin [ 1 ] = skel.right_hand.position.y;
-    origin [ 2 ] = skel.right_hand.position.z;
+    origin [ 0 ] = centroid[0];
+    origin [ 1 ] = centroid[1];
+    origin [ 2 ] = centroid[2];
 
 
    pcl::getTransformationFromTwoUnitVectorsAndOrigin(y_axis, z_axis, origin, transformation);
@@ -332,9 +332,10 @@ public:
      for ( int i = 0; i < output.points.size(); i++ )
       {
 	int zz = floor (( output.points[i].z - origin[2] ) / offset_z);
-	int pp = floor (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
+	int pp = floor (sqrt( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
 	int aa = floor(( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
 
+	pp = ( pp < 5 ) ? pp : 4;
         int index = zz * 40 + pp * 8 + aa;
 	if ( index < 0 || index > 199 ) 
 	  {
