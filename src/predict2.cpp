@@ -65,6 +65,8 @@ struct HandSaver
 
   int svm_type, nr_class;
   double *prob_estimates;
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud;
 public:
   
   HandSaver(std::string name_, int saveChoice, string folder):foldername(folder), name(name_), predict_probability(1), max_nr_attr(64), save(saveChoice)
@@ -81,6 +83,8 @@ public:
       skelmsg.header.seq = 0;
       pcloudmsg.header.seq = 0;
       string cmd;
+      pcl::PointCloud<pcl::PointXYZ>::Ptr tmp (new pcl::PointCloud<pcl::PointXYZ> ());
+      in_cloud = tmp;
       cmd = "mkdir " + foldername;
       system(cmd.c_str());
       
@@ -465,6 +469,9 @@ public:
   // Concatenate fields for saving
   pcl::PointCloud<pcl::PointNormal> mls_cloud;
   pcl::concatenateFields (mls_points, *mls_normals, mls_cloud);
+ 
+ 
+ 
 
 
 }
@@ -481,10 +488,11 @@ public:
     cout << "time: " << t1 << endl;
     std::stringstream filename;
     pcl::PointCloud<pcl::PointXYZ> handcloud;
-     pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud (new pcl::PointCloud<pcl::PointXYZ> ());
+  
      
     pcl::fromROSMsg( cloud, *in_cloud);
     resampling(in_cloud, handcloud);
+    
     extractFeatures(handcloud, skels.skeletons[0]);
     kq = predict();
     count ++;
