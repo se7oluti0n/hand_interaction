@@ -101,18 +101,18 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
   Eigen::Vector4f centroid, direction,armvector;
   Eigen::Vector3f z_axis, y_axis, x_axis, origin;
 
-  Eigen::Vector3f right_arm, zvector, cross;
+  Eigen::Vector3f right_arm;
 
   right_arm[0] = armin.right_hand.position.x - armin.right_elbow.position.x;
-  right_arm[1] = 0; //armin.right_hand.position.y - armin.right_elbow.position.y;
+  right_arm[1] = armin.right_hand.position.y - armin.right_elbow.position.y;
   right_arm[2] = armin.right_hand.position.z - armin.right_elbow.position.z;
-
+  /*
   zvector[0] = 0;
   zvector[1] = 0;
   zvector[2] = 1;
 
-  double dot = right_arm.dot(zvector);
-  cout << "x: " << right_arm[0] << " y : " << right_arm[1] << " dot: " << dot;
+  // double dot = right_arm.dot(zvector);
+  //cout << "x: " << right_arm[0] << " y : " << right_arm[1] << " dot: " << dot;
   // cross = zvector.cross(right_arm);
   
   double tann = right_arm[0] / right_arm[2];
@@ -120,7 +120,7 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
   right_arm[1] = armin.right_hand.position.y - armin.right_elbow.position.y;
   
   
-
+  */
    pcl::compute3DCentroid (cloudin, centroid);
    pcl::computeCovarianceMatrixNormalized(cloudin,centroid,cov);
    pcl::eigen33 (cov, eigen_vectors, eigen_values);
@@ -132,7 +132,7 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
   
    double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
    if ( cos < 0 ) z_axis = - z_axis;
-   cout << " tan: "<< tann ;
+   /*cout << " tan: "<< tann ;
     if ( tann <= -3.7 || tann >= 3.7 ) 
       {
 	y_axis[0] = eigen_vectors( 0, 1);
@@ -166,7 +166,11 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
     y_axis[1] = 1;//eigen_vectors( 1, 0);
     y_axis[2] = 0;//eigen_vectors( 2, 0);
     */
-    
+
+    y_axis[0] = eigen_vectors( 0, 0);
+    y_axis[1] = eigen_vectors( 1, 0);
+    y_axis[2] = eigen_vectors( 2, 0);
+
 
     origin [ 0 ] = armin.right_hand.position.x;
     origin [ 1 ] = armin.right_hand.position.y;
@@ -256,8 +260,8 @@ int main(int argc, char ** argv)
     const double PI = 3.141592;
     float offset_a = PI / 3.999;
 
-    float histogram[3][240];
-    for (int j = 0; j < 3; j++ )
+    float histogram[4][240];
+    for (int j = 0; j < 4; j++ )
     for ( int i = 0; i < 240; i++ )
       
       {
@@ -277,19 +281,23 @@ int main(int argc, char ** argv)
 	    exit(1);
 	  }
 	histogram[0][index] += 1.0;
-	index = zz * 40 + ((pp + 2)/8)+aa;
+	index = zz * 40 + pp * 8 + ( aa + 2 ) % 8 ;
 
 	histogram[1][index] += 1.0;
 
-	index = zz * 40 + (( pp + 6 ) / 8 ) +aa;
+	index = zz * 40 + pp * 8   +  ( aa  + 4 ) % 8;
 	
 	histogram[2][index] += 1.0;
+
+	index = zz * 40 + pp * 8   +  ( aa  + 6 ) % 8;
+	
+	histogram[3][index] += 1.0;
       }
      cout << "Complete histogram" << endl;
      filename.str("");
      filename << "histogram/" << setfill('0') << setw(4) << count << ".data";
 
-     for ( int j = 0; j < 3; j++ )
+     for ( int j = 0; j < 4; j++ )
      for ( int i = 0; i < 240; i++ )
     {
       histogram[j][i] /= (float) output.points.size();
@@ -309,7 +317,7 @@ int main(int argc, char ** argv)
      
      hisout.close();
      cout << "Complete write to Histogram folder" << endl;
-     for ( int j  = 0; j < 3; j ++ ){
+     for ( int j  = 0; j < 4; j ++ ){
 
        out << classs;
    

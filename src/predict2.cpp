@@ -179,26 +179,15 @@ public:
      Eigen::Vector3f z_axis, y_axis, x_axis, origin;
      Eigen::Affine3f transformation;
 
-     Eigen::Vector3f right_arm, zvector, cross;
+     Eigen::Vector3f right_arm;
 
   right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
-  right_arm[1] = 0; //armin.right_hand.position.y - armin.right_elbow.position.y;
+  right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
   right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
 
-  zvector[0] = 0;
-  zvector[1] = 0;
-  zvector[2] = 1;
-
-  double dot = right_arm.dot(zvector);
-  //  cout << "x: " << right_arm[0] << " y : " << right_arm[1] << " dot: " << dot;
-  // cross = zvector.cross(right_arm);
-  
-  double tann = right_arm[0] / right_arm[2];
-  
-  right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
-     pcl::compute3DCentroid (cloud, centroid);
-     pcl::computeCovarianceMatrixNormalized(cloud,centroid,cov);
-     pcl::eigen33 (cov, eigen_vectors, eigen_values);
+   pcl::compute3DCentroid (cloud, centroid);
+   pcl::computeCovarianceMatrixNormalized(cloud,centroid,cov);
+   pcl::eigen33 (cov, eigen_vectors, eigen_values);
 
    
     z_axis[0] = eigen_vectors( 0, 2);
@@ -217,41 +206,11 @@ public:
     double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
    if ( cos < 0 ) z_axis = - z_axis;
    // cout << " tan: "<< tann ;
-    if ( tann <= -3.7 || tann >= 3.7 ) 
-      {
-	y_axis[0] = eigen_vectors( 0, 1);
-	y_axis[1] = eigen_vectors( 1, 1);
-	y_axis[2] = eigen_vectors( 2, 1);
-      }
-    else
-      {
-	y_axis[0] = eigen_vectors( 0, 0);
-	y_axis[1] = eigen_vectors( 1, 0);
-	y_axis[2] = eigen_vectors( 2, 0);
-      }
+    
+   y_axis[0] = eigen_vectors( 0, 0);
+   y_axis[1] = eigen_vectors( 1, 0);
+   y_axis[2] = eigen_vectors( 2, 0);
   
-    cross =  right_arm.cross(y_axis);
-    double sin = cross.norm() / right_arm.norm() / y_axis.norm();
-
-
-    if ( sin > 0 ) y_axis = -y_axis;
-    //  cout << " sin: " << sin << " cos: " << cos << endl;
-    /*   x_axis[0] = eigen_vectors( 0, 1);
-    x_axis[1] = eigen_vectors( 1, 1);
-    x_axis[2] = eigen_vectors( 2, 1);
-
-    
-
-    /* z_axis[0] = 0;//eigen_vectors( 0, 2);
-    z_axis[1] = 0;//eigen_vectors( 1, 2);
-    z_axis[2] = 1;//eigen_vectors( 2, 2);
-    
-    y_axis[0] = 0;//eigen_vectors( 0, 0);
-    y_axis[1] = 1;//eigen_vectors( 1, 0);
-    y_axis[2] = 0;//eigen_vectors( 2, 0);
-    */
-    
-
     origin [ 0 ] = skel.right_hand.position.x;
     origin [ 1 ] = skel.right_hand.position.y;
     origin [ 2 ] = skel.right_hand.position.z;

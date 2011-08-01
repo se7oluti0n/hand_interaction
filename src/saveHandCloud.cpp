@@ -136,60 +136,8 @@ public:
 
     imgptr = cv_bridge::toCvShare( imgmsg, enc::BGR8);
     cv::imwrite(filename.str().c_str(), imgptr->image);
-    //cv::Mat img = imgptr->image.clone();
-    // imageHandDetect(img, );
-
-    /* float constant = 1.90476e-03;
-    float centerX = 319.5;
-    float centerY = 239.5;
-    float radius = 0.1;
-    double PI = 3.14159265;
-    
-    int u,v,r, u1, v1;
-    u = (int ) ( skels.skeletons[0].right_hand.position.x / constant / skels.skeletons[0].right_hand.position.z + centerX ); 
-    v = (int ) ( skels.skeletons[0].right_hand.position.y / constant / skels.skeletons[0].right_hand.position.z + centerY ); 
-
-    u1 = (int ) ( skels.skeletons[0].right_elbow.position.x / constant / skels.skeletons[0].right_elbow.position.z + centerX ); 
-    v1 = (int ) ( skels.skeletons[0].right_elbow.position.y / constant / skels.skeletons[0].right_elbow.position.z + centerY ); 
-    
-    double angle;
-    angle = atan2(skels.skeletons[0].right_hand.position.y- skels.skeletons[0].right_elbow.position.y , skels.skeletons[0].right_hand.position.x - skels.skeletons[0].right_elbow.position.x);
-    
-    angle = 180 * angle / PI;
-
-    cv::Mat rot_mat = cv::getRotationMatrix2D(cv::Point2f(centerX,centerY), angle, 1.0);
-    cv::Mat iRot_mat, xx, xx1;
-    cv::invertAffineTransform(rot_mat, iRot_mat);
-    xx.create(3,1,CV_64FC1);
-    //xx1.create(2,1,CV_32FC1);
-    r = (int ) ( radius / constant / skels.skeletons[0].right_hand.position.z); 
-    cout << " constant : " << constant << " " << centerX << " " << centerY << endl;
-    cout << " x y z " << skels.skeletons[0].right_hand.position.x << " " << skels.skeletons[0].right_hand.position.y << " "<< skels.skeletons[0].right_hand.position.z << endl;
-    cout << " UV : " << u << " " << v << endl;
-    
-    cv::line( img, cv::Point(u1,v1), cv::Point(u,v), cv::Scalar(0,0,255), 2);
-    
-    cv::Mat dst;       
-    cv::warpAffine(img, dst, rot_mat,cv::Size(640,480));
-    xx.at<float>(0,0) = (float)u ;
-    xx.at<float>(1,0) = (float)v ;
-    xx.at<float>(2,0) = 1;
-
-    xx1 = rot_mat*xx;
-    cout << "XX: "<< xx.at<float>(0,0) << " " << xx.at<float>(1,0) << endl;
-    filename.str("");
-    filename << angle;
-    
-    cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,255,0), 2);
-    cv::circle( dst, cv::Point((int)( xx1.at<float>(0,0) + centerX),(int) ( xx1.at<float>(1,0)) + centerY) , r, cv::Scalar(0,0,255), 2);
-    cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0));*/
-   
-    /*cv::imshow("Hand Detect", img);
-    cv::imshow("Rotation", dst);
-    cv::waitKey(20);
-    std::cout << count << " "  <<  lastskelseq << " " << lastcloudseq << endl;*/
     count++;
-   
+    std::cout << "Writed " << count << std::endl; 
 
   }
   /**************************************************************************
@@ -213,19 +161,6 @@ public:
 
   void cloudcb( const sensor_msgs::PointCloud2ConstPtr &scan )
   {
-    /*if ( scan)
-      {  pcl::PointCloud<pcl::PointXYZ> handcloud;
-    std::stringstream filename;
-    pcloudmsg = *scan;
-    pcl::fromROSMsg( pcloudmsg, handcloud);
-    filename.str("");
-    filename << "data/" << name << count << ".pcd";
-    pcl::io::savePCDFileASCII( filename.str().c_str(), handcloud );
-    count++;
-      }
-
-    */
-
     pcloudmsg = *scan;
     messageSync();
   }
