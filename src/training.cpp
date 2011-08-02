@@ -234,7 +234,7 @@ int main(int argc, char ** argv)
   system("mkdir converted");
   system("mkdir histogram");
   
-  pcl::PointCloud<pcl::PointXYZ> cloud, output, cloud2;
+  pcl::PointCloud<pcl::PointXYZ> cloud, output;
   Eigen::Affine3f transformation;
    
   std::stringstream filename;
@@ -244,6 +244,7 @@ int main(int argc, char ** argv)
   ofstream out("trainingdata.txt");
   while ( ! pcdin.eof() )
   {
+    pcl::PointCloud<pcl::PointXYZ> cloud2;
     cout << "Start processing file " << count << endl;
     char name[256];
    pcdin.getline( name, 256 );
@@ -315,9 +316,9 @@ int main(int argc, char ** argv)
       {
 	int zz = floor (( output.points[i].z - origin[2] ) / offset_z);
 	int pp = floor (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
-	int aa = floor(( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
+	int aa = floor (( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
 
-        int index = zz * 40 + pp * 8 + aa;
+        int index = zz * 40 + pp * 8 + aa % 8;
 	if ( index < 0 || index > 239 ) 
 	  {
 	    cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;

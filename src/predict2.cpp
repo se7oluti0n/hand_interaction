@@ -40,6 +40,8 @@ int max_nr_attr = 64;
 struct svm_model* model;
 int predict_probability=0;
 
+boost::mt19937 gen;
+
 
 struct HandSaver
 {
@@ -66,7 +68,6 @@ struct HandSaver
   int svm_type, nr_class;
   double *prob_estimates;
 
-  boost::mt19937 gen;
   
 public:
   
@@ -299,10 +300,10 @@ public:
      for ( int i = 0; i < output.points.size(); i++ )
        {
 	 int zz = floor (( output.points[i].z - origin[2] ) / offset_z);
-	 int pp = (int) (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
-	 int aa = (int) (( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
+	 int pp = floor (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
+	 int aa = floor (( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
 
-	 int index = zz * 40 + pp * 8 + aa;
+	 int index = zz * 40 + pp * 8 + aa % 8;
 	 //if ( index < 0 || index > 239 ) cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;
 	
 	 histogram[ index  ] += 1.0;
