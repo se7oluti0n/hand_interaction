@@ -1,3 +1,5 @@
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_real.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
@@ -52,6 +54,8 @@ void getTransformationFromTwoUnitVectorsAndOrigin(const Eigen::Vector3f& y_direc
 }
 
 */
+
+boost::mt19937 gen;
 struct arms
 {
   body_msgs::SkeletonJoint left_hand;
@@ -91,6 +95,42 @@ void readJointFile(char *name, arms &a)
   in >> a.right_elbow.position.z;
   in >> a.right_elbow.confidence;
   
+}
+
+pcl::PointXYZ draw_sample ( pcl::PointXYZ center, float error )
+{
+  float z = center.z;
+  float min = z - error / 2;
+  float max = z + error / 2;
+
+  //boost::random::mt19937 rng;         // produces randomness out of thin air
+                                    // see pseudo-random number generators
+  boost::uniform_real<> u(min,max);
+                                    // distribution that maps to 1..6
+                                    // see random number distributions
+  float x = u(gen);                   // simulate rolling a die
+  
+  return pcl::PointXYZ( center.x, center.y, x );
+
+} 
+void resample( pcl::PointCloud<pcl::PointXYZ> & cloudin, pcl::PointCloud<pcl::PointXYZ> & cloudout, arms &armin )
+{
+  float baseline = 0.07219;
+  float disparity_error = 0.17;
+  float focal_length = 580;
+  float z = armin.right_hand.position.z;
+  int sample_point = 3000 / cloudin.points.size() + 1;
+  
+  float error = disparity_error * z * z / focal_length / baseline;
+  
+  for (int i = 0; i < cloudin.points.size(); i++ )
+  {
+    for ( int j = 0; j < sample_point; j++ )
+      cloudout.push_back( draw_sample ( cloudin.points[i], error));
+  }
+
+
+
 }
 
 void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eigen::Affine3f &transformation)
@@ -181,6 +221,8 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
 }
 int main(int argc, char ** argv)
 {
+  srand((unsigned)time(0));
+
   //ros::init(argc, argv, "test");
   int classs;
   cout << "Input class label( 1 / 0 ): " ;
@@ -192,7 +234,7 @@ int main(int argc, char ** argv)
   system("mkdir converted");
   system("mkdir histogram");
   
-  pcl::PointCloud<pcl::PointXYZ> cloud, output;
+  pcl::PointCloud<pcl::PointXYZ> cloud, output, cloud2;
   Eigen::Affine3f transformation;
    
   std::stringstream filename;
@@ -217,8 +259,9 @@ int main(int argc, char ** argv)
    arms aa;
    readJointFile(name, aa);
    cout << count << " : " ;
-   getTransfromation( cloud, aa, transformation);
-   pcl::getTransformedPointCloud (cloud, transformation, output);
+   resample( cloud, cloud2, aa);
+   getTransfromation( cloud2, aa, transformation);
+   pcl::getTransformedPointCloud (cloud2, transformation, output);
 
    pcl::PointXYZ min_pt, max_pt;
 

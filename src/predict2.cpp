@@ -1,7 +1,8 @@
 #include <boost/thread/thread.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
-
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_real.hpp>
 #include <ros/ros.h>
 #include <body_msgs/Skeletons.h>
 #include <sensor_msgs/PointCloud.h>
@@ -64,6 +65,9 @@ struct HandSaver
 
   int svm_type, nr_class;
   double *prob_estimates;
+
+  boost::mt19937 gen;
+  
 public:
   
   HandSaver(std::string name_, int saveChoice, string folder):foldername(folder), name(name_), predict_probability(1), max_nr_attr(64), save(saveChoice)
@@ -121,6 +125,42 @@ public:
   }
   
 
+  pcl::PointXYZ draw_sample ( pcl::PointXYZ center, float error )
+  {
+    float z = center.z;
+    float min = z - error / 2;
+    float max = z + error / 2;
+
+    //boost::random::mt19937 rng;         // produces randomness out of thin air
+    // see pseudo-random number generators
+    boost::uniform_real<> u(min,max);
+    // distribution that maps to 1..6
+    // see random number distributions
+    float x = u(gen);                   // simulate rolling a die
+
+    return pcl::PointXYZ( center.x, center.y, x );
+
+  } 
+  void resample( pcl::PointCloud<pcl::PointXYZ> & cloudin, pcl::PointCloud<pcl::PointXYZ> & cloudout, body_msgs::Skeleton  &armin )
+  {
+    float baseline = 0.07219;
+    float disparity_error = 0.17;
+    float focal_length = 580;
+    float z = armin.right_hand.position.z;
+    int sample_point = 3000 / cloudin.points.size() + 1;
+  
+    float error = disparity_error * z * z / focal_length / baseline;
+  
+    for (int i = 0; i < cloudin.points.size(); i++ )
+      {
+	for ( int j = 0; j < sample_point; j++ )
+	  cloudout.push_back( draw_sample ( cloudin.points[i], error));
+      }
+
+
+
+  }
+
   // \brief This function tries to sync the skeleton and point cloud messages 
   void messageSync()
   {
@@ -170,7 +210,7 @@ public:
 
   void extractFeatures( pcl::PointCloud<pcl::PointXYZ> cloud, body_msgs::Skeleton skel )
   {
-     pcl::PointCloud<pcl::PointXYZ> output;
+    pcl::PointCloud<pcl::PointXYZ> output, cloud2;
      EIGEN_ALIGN16 Eigen::Vector3f eigen_values;
      EIGEN_ALIGN16 Eigen::Matrix3f eigen_vectors;
      Eigen::Matrix3f cov;
@@ -181,100 +221,101 @@ public:
 
      Eigen::Vector3f right_arm;
 
-  right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
-  right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
-  right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
+     resample ( cloud, cloud2, skel);
+     right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
+     right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
+     right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
 
-   pcl::compute3DCentroid (cloud, centroid);
-   pcl::computeCovarianceMatrixNormalized(cloud,centroid,cov);
-   pcl::eigen33 (cov, eigen_vectors, eigen_values);
+     pcl::compute3DCentroid (cloud2, centroid);
+     pcl::computeCovarianceMatrixNormalized(cloud2,centroid,cov);
+     pcl::eigen33 (cov, eigen_vectors, eigen_values);
 
    
-    z_axis[0] = eigen_vectors( 0, 2);
-    z_axis[1] = eigen_vectors( 1, 2);
-    z_axis[2] = eigen_vectors( 2, 2);
+     z_axis[0] = eigen_vectors( 0, 2);
+     z_axis[1] = eigen_vectors( 1, 2);
+     z_axis[2] = eigen_vectors( 2, 2);
     
-    /*  y_axis[0] = eigen_vectors( 0, 0);
-    y_axis[1] = eigen_vectors( 1, 0);
-    y_axis[2] = eigen_vectors( 2, 0);
+     /*  y_axis[0] = eigen_vectors( 0, 0);
+	 y_axis[1] = eigen_vectors( 1, 0);
+	 y_axis[2] = eigen_vectors( 2, 0);
 
-    origin [ 0 ] = centroid[0];
-    origin [ 1 ] = centroid[1];
-    origin [ 2 ] = centroid[2];
-    */
+	 origin [ 0 ] = centroid[0];
+	 origin [ 1 ] = centroid[1];
+	 origin [ 2 ] = centroid[2];
+     */
 
-    double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
-   if ( cos < 0 ) z_axis = - z_axis;
-   // cout << " tan: "<< tann ;
+     double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
+     if ( cos < 0 ) z_axis = - z_axis;
+     // cout << " tan: "<< tann ;
     
-   y_axis[0] = eigen_vectors( 0, 0);
-   y_axis[1] = eigen_vectors( 1, 0);
-   y_axis[2] = eigen_vectors( 2, 0);
+     y_axis[0] = eigen_vectors( 0, 0);
+     y_axis[1] = eigen_vectors( 1, 0);
+     y_axis[2] = eigen_vectors( 2, 0);
   
-    origin [ 0 ] = skel.right_hand.position.x;
-    origin [ 1 ] = skel.right_hand.position.y;
-    origin [ 2 ] = skel.right_hand.position.z;
+     origin [ 0 ] = skel.right_hand.position.x;
+     origin [ 1 ] = skel.right_hand.position.y;
+     origin [ 2 ] = skel.right_hand.position.z;
 
 
-   pcl::getTransformationFromTwoUnitVectorsAndOrigin(y_axis, z_axis, origin, transformation);
+     pcl::getTransformationFromTwoUnitVectorsAndOrigin(y_axis, z_axis, origin, transformation);
 
-   pcl::getTransformedPointCloud (cloud, transformation, output);
+     pcl::getTransformedPointCloud (cloud2, transformation, output);
 
-   pcl::PointXYZ min_pt, max_pt;
+     pcl::PointXYZ min_pt, max_pt;
 
-   pcl::getMinMax3D( output, min_pt, max_pt);
+     pcl::getMinMax3D( output, min_pt, max_pt);
 
    
-   //    float r = ( max_pt.y - min_pt.y )* ( max_pt.y - min_pt.y) +  ( min_pt.x - max_pt.x) * ( min_pt.x - max_pt.x )  ;
-   // r /= 4;
+     //    float r = ( max_pt.y - min_pt.y )* ( max_pt.y - min_pt.y) +  ( min_pt.x - max_pt.x) * ( min_pt.x - max_pt.x )  ;
+     // r /= 4;
 
       
-    float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
-    float r2 = min_pt.y * min_pt.y + min_pt.x * min_pt.x;
-    float r3 = max_pt.y * max_pt.y + min_pt.x * min_pt.x;
-    float r4 = min_pt.y * min_pt.y + max_pt.x * max_pt.x;
+     float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
+     float r2 = min_pt.y * min_pt.y + min_pt.x * min_pt.x;
+     float r3 = max_pt.y * max_pt.y + min_pt.x * min_pt.x;
+     float r4 = min_pt.y * min_pt.y + max_pt.x * max_pt.x;
 
     
     
-    float r = r1 > r2?r1:r2;
-    r = r > r3?r:r3;
-    r = r > r4?r:r4;
+     float r = r1 > r2?r1:r2;
+     r = r > r3?r:r3;
+     r = r > r4?r:r4;
 
     
-    float offset_r = r / 4.999;
-    origin[2] = min_pt.z;
+     float offset_r = r / 4.999;
+     origin[2] = min_pt.z;
     
-    float offset_z = (max_pt.z - min_pt.z) / 5.999;
-    const double PI = 3.141592;
-    float offset_a = PI / 3.999;
+     float offset_z = (max_pt.z - min_pt.z) / 5.999;
+     const double PI = 3.141592;
+     float offset_a = PI / 3.999;
 
-    float histogram[240];
-    for ( int i = 0; i < 240; i++ )
+     float histogram[240];
+     for ( int i = 0; i < 240; i++ )
       
-      {
-	histogram[i] = 0.0;
-	//	cout << histogram[i];
-      }
+       {
+	 histogram[i] = 0.0;
+	 //	cout << histogram[i];
+       }
      for ( int i = 0; i < output.points.size(); i++ )
-      {
-	int zz = floor (( output.points[i].z - origin[2] ) / offset_z);
-	int pp = (int) (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
-	int aa = (int) (( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
+       {
+	 int zz = floor (( output.points[i].z - origin[2] ) / offset_z);
+	 int pp = (int) (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
+	 int aa = (int) (( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
 
-        int index = zz * 40 + pp * 8 + aa;
-	//if ( index < 0 || index > 239 ) cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;
+	 int index = zz * 40 + pp * 8 + aa;
+	 //if ( index < 0 || index > 239 ) cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;
 	
-	histogram[ index  ] += 1.0;
+	 histogram[ index  ] += 1.0;
 
-      }
+       }
      
      for ( int i = 0; i < 240; i++ )
-    {
-      histogram[i] /= (float) output.points.size();
-      x[i].index = i+1;
-      x[i].value = histogram[i];
-      // tcout << histogram[i] << endl;
-    }
+       {
+	 histogram[i] /= (float) output.points.size();
+	 x[i].index = i+1;
+	 x[i].value = histogram[i];
+	 // tcout << histogram[i] << endl;
+       }
      x[240].index = -1;
 
 
