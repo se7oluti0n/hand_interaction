@@ -221,7 +221,7 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
 }
 int main(int argc, char ** argv)
 {
-  srand((unsigned)time(0));
+  
 
   //ros::init(argc, argv, "test");
   int classs;
