@@ -119,7 +119,7 @@ void resample( pcl::PointCloud<pcl::PointXYZ> & cloudin, pcl::PointCloud<pcl::Po
   float disparity_error = 0.17;
   float focal_length = 580;
   float z = armin.right_hand.position.z;
-  int sample_point = 3000 / cloudin.points.size() + 1;
+  int sample_point = 5000 / cloudin.points.size() + 1;
   
   float error = disparity_error * z * z / focal_length / baseline;
   

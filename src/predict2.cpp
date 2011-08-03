@@ -148,7 +148,7 @@ public:
     float disparity_error = 0.17;
     float focal_length = 580;
     float z = armin.right_hand.position.z;
-    int sample_point = 3000 / cloudin.points.size() + 1;
+    int sample_point = 6000 / cloudin.points.size() + 1;
   
     float error = disparity_error * z * z / focal_length / baseline;
   
