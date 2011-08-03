@@ -32,7 +32,13 @@
 #include "svm.h"
 using namespace std;
 namespace enc = sensor_msgs::image_encodings;
-
+struct arms
+{
+  body_msgs::SkeletonJoint left_hand;
+  body_msgs::SkeletonJoint left_elbow;
+  body_msgs::SkeletonJoint right_hand;
+  body_msgs::SkeletonJoint right_elbow;
+};
 struct svm_node *x;
 int max_nr_attr = 64;
 
@@ -64,13 +70,17 @@ struct HandSaver
 
   int svm_type, nr_class;
   double *prob_estimates;
+  int online;
 public:
   
-  HandSaver(std::string name_, int saveChoice, string folder):foldername(folder), name(name_), predict_probability(1), max_nr_attr(64), save(saveChoice)
+  HandSaver(std::string name_, int saveChoice, string folder, int onl = 1):foldername(folder), name(name_), predict_probability(1), max_nr_attr(64), save(saveChoice), online(onl)
     {
-      cloudsub_ = n_.subscribe("hand1_fullcloud", 1, &HandSaver::cloudcb, this);      
-      skelsub_ = n_.subscribe("/skeletons", 1, &HandSaver::skelcb, this);
-      imgsub_  = n_.subscribe("/camera/rgb/image_color", 1, &HandSaver::imgcb, this);
+      if (online)
+	{
+	  cloudsub_ = n_.subscribe("hand1_fullcloud", 1, &HandSaver::cloudcb, this);      
+	  skelsub_ = n_.subscribe("/skeletons", 1, &HandSaver::skelcb, this);
+	  imgsub_  = n_.subscribe("/camera/rgb/image_color", 1, &HandSaver::imgcb, this);
+	}
       count = 0;
       pos = 0;
       neg = 0;
@@ -110,6 +120,7 @@ public:
     nr_class=svm_get_nr_class(model);
     prob_estimates = (double *) malloc(nr_class*sizeof(double));
      
+    if ( !online ) Process();
     }
 
   ~HandSaver()
@@ -168,7 +179,16 @@ public:
 
   }
 
-  void extractFeatures( pcl::PointCloud<pcl::PointXYZ> cloud, body_msgs::Skeleton skel )
+    void extractArm( body_msgs::Skeleton &skel, arms &a)
+  {
+    a.left_hand = skel.left_hand;
+    a.right_hand = skel.right_hand;
+    a.left_elbow = skel.left_elbow;
+    a.right_elbow = skel.right_elbow;
+  }
+
+
+  void extractFeatures( pcl::PointCloud<pcl::PointXYZ> cloud, arms &skel )
   {
      pcl::PointCloud<pcl::PointXYZ> output;
      EIGEN_ALIGN16 Eigen::Vector3f eigen_values;
@@ -280,6 +300,38 @@ public:
 
   }
 
+  void readJointFile(char *name, arms &a)
+  {
+    ifstream in(name);
+    string jointname;
+ 
+    cout << name << " " ;
+    in >> jointname;
+    in >> a.left_hand.position.x;
+    cout << a.left_hand.position.x;
+    in >> a.left_hand.position.y;
+    in >> a.left_hand.position.z;
+    in >> a.left_hand.confidence;
+  
+    in >> jointname;
+    in >> a.right_hand.position.x;
+    in >> a.right_hand.position.y;
+    in >> a.right_hand.position.z;
+    in >> a.right_hand.confidence;
+  
+    in >> jointname;
+    in >> a.left_elbow.position.x;
+    in >> a.left_elbow.position.y;
+    in >> a.left_elbow.position.z;
+    in >> a.left_elbow.confidence;
+  
+    in >> jointname;
+    in >> a.right_elbow.position.x;
+    in >> a.right_elbow.position.y;
+    in >> a.right_elbow.position.z;
+    in >> a.right_elbow.confidence;
+  
+  }
 
   int  predict()
   {
@@ -343,7 +395,9 @@ public:
     std::stringstream filename;
     pcl::PointCloud<pcl::PointXYZ> handcloud;
     pcl::fromROSMsg( cloud, handcloud);
-    extractFeatures(handcloud, skels.skeletons[0]);
+    arms a;
+    extractArm( skels.skeletons[0], a);
+    extractFeatures(handcloud, a);
     kq = predict();
     count ++;
      
@@ -414,6 +468,111 @@ public:
     
       }
   }
+
+  void Process()
+  {
+    int classs;
+    int kq;
+    // cout << "Input class label( 1 / 0 ): " ;
+    //cin >> classs;
+  
+  
+    system("ls *pcd > PCDfileList");
+    system("ls *txt > SkelFileList");
+    system("ls *jpg > ImageFileList");
+    system("mkdir converted");
+    system("mkdir histogram");
+  
+    pcl::PointCloud<pcl::PointXYZ> handcloud, output;
+    Eigen::Affine3f transformation;
+   
+    std::stringstream filename;
+    //int count = 0;
+    ifstream pcdin("PCDfileList");
+    ifstream skelin("SkelFileList");
+    ifstream imgin("ImageFileList"); 
+    ofstream out("trainingdata.txt");
+    while ( ! pcdin.eof() )
+      {
+	
+	cout << "Start processing file " << count << endl;
+	char fname[256];
+	pcdin.getline( fname, 256 );
+    
+	if ( pcl::io::loadPCDFile( fname, handcloud ) == -1 )
+	  {
+	    // PCL_ERROR ("Couldn't read file test_pcd.pcd \n");
+	    break;
+	  }
+   
+	skelin.getline( fname, 256 );
+
+	arms aa;
+	readJointFile(fname, aa);
+	
+	 extractFeatures(handcloud, aa);
+	 kq = predict();
+	 count ++;
+     
+	 imgin.getline( fname, 256);
+
+	 
+	 cv::Mat img = cv::imread(fname);
+	 // imageHandDetect(img, );
+
+	 float constant = 1.90476e-03;
+	 float centerX = 319.5;
+	 float centerY = 239.5;
+	 float radius = 0.1;
+    
+	 int u,v,r;
+	 u = (int ) ( aa.right_hand.position.x / constant / aa.right_hand.position.z + centerX ); 
+	 v = (int ) ( aa.right_hand.position.y / constant / aa.right_hand.position.z + centerY ); 
+	 r = (int ) ( radius / constant / aa.right_hand.position.z); 
+    
+   
+
+	 //cv::imwrite(filename.str().c_str(), imgptr->image);
+	 filename.str("");
+	 if ( kq == 1 )
+	   {
+	     cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,255,0),2);
+	     filename << "YUBISASHI [ Prob: " << prob_estimates[1] << " ]";
+	     cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0));
+	     pos++;
+	   }
+	 else
+	   {	
+	     cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,0,255),2);
+	     filename << "NOT YUBISASHI [ Prob: " << prob_estimates[1] << " ]" ;     
+	     cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,0,255));
+	     neg++;
+	   }
+    
+	 std::cout << "Sum : " << count << " Positive : " << pos << " Negative : " << neg << std::endl;
+	 filename.str("");
+	 filename << "Positive: " << pos << " / " <<  count;
+	 cv::putText( img, filename.str(), cv::Point(10,50), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,255,0));
+	 filename.str("");
+   
+	 
+	 cv::imshow("Hand Detect", img);
+	 while ( cv::waitKey(0) == -1 );
+	 if ( save != 0 ) 
+	   {
+ 
+	     filename.str("");
+	     filename << foldername << "/" << setfill('0') << setw(7) << count << "t" << save << kq  << ".pcd";
+	     pcl::io::savePCDFileASCII( filename.str().c_str(), handcloud);
+    
+	     filename.str("");
+	     filename << foldername << "/" << setfill('0') << setw(7) << count << "t" << save << kq  <<".jpg";
+	     cv::imwrite(filename.str().c_str(), img);
+    
+	   }
+
+      }
+  }  
   void cloudcb( const sensor_msgs::PointCloud2ConstPtr &scan )
   {
     /*if ( scan)
@@ -451,10 +610,11 @@ public:
 
 int main( int argc, char ** argv )
 {
+
   ros::init( argc, argv, "predict");
   ros::NodeHandle n;
   std::string name, folder;
-  int save;
+  int save, online = 1;
   std::cout << "Please input the Hand MODEL filename: ";
   std::cin >> name;
   std::cout << "Would you like to save data? ( 0 for No, 1 for false positive, 2 for false nagative ): ";
@@ -464,8 +624,10 @@ int main( int argc, char ** argv )
       std::cout << "Input folder name to save: ";
        std::cin >> folder;
     }
-  HandSaver  saver(name, save, folder);
-  ros::spin();
+  std::cout << "Processing ONLINE? : ";
+  std::cin >> online;
+  HandSaver  saver(name, save, folder, online);
+  if ( online ) ros::spin();
 
   return 0;
 }
