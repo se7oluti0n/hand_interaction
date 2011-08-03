@@ -119,7 +119,7 @@ void resample( pcl::PointCloud<pcl::PointXYZ> & cloudin, pcl::PointCloud<pcl::Po
   float disparity_error = 0.17;
   float focal_length = 580;
   float z = armin.right_hand.position.z;
-  int sample_point = 5000 / cloudin.points.size() + 1;
+  int sample_point = 6000 / cloudin.points.size() + 1;
   
   float error = disparity_error * z * z / focal_length / baseline;
   
@@ -234,8 +234,6 @@ int main(int argc, char ** argv)
   system("mkdir converted");
   system("mkdir histogram");
   
-  pcl::PointCloud<pcl::PointXYZ> cloud, output;
-  Eigen::Affine3f transformation;
    
   std::stringstream filename;
   int count = 0;
@@ -244,6 +242,9 @@ int main(int argc, char ** argv)
   ofstream out("trainingdata.txt");
   while ( ! pcdin.eof() )
   {
+     pcl::PointCloud<pcl::PointXYZ> cloud, output;
+     Eigen::Affine3f transformation;
+ 
     pcl::PointCloud<pcl::PointXYZ> cloud2;
     cout << "Start processing file " << count << endl;
     char name[256];
@@ -301,7 +302,7 @@ int main(int argc, char ** argv)
     origin[2] = min_pt.z;
     
     float offset_z = (max_pt.z - min_pt.z) / 5.999;
-    const double PI = 3.141592;
+    const double PI = 3.14159266;
     float offset_a = PI / 3.999;
 
     float histogram[4][240];
@@ -318,10 +319,10 @@ int main(int argc, char ** argv)
 	int pp = floor (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
 	int aa = floor (( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
 
-        int index = zz * 40 + pp * 8 + aa % 8;
+        int index = zz * 40 + pp * 8 + (aa % 8);
 	if ( index < 0 || index > 239 ) 
 	  {
-	    cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;
+	    cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << " " << index <<   endl;
 	    exit(1);
 	  }
 	histogram[0][index] += 1.0;
