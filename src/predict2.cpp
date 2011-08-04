@@ -41,10 +41,13 @@ struct arms
   body_msgs::SkeletonJoint right_elbow;
 };
 
-int max_nr_attr = 64;
+struct feature
+{
+  struct svm_node ft[250];
+};
 
-struct svm_model* model;
-int predict_probability=0;
+
+
 
 boost::mt19937 gen;
 
@@ -58,7 +61,8 @@ struct HandSaver
   body_msgs::Skeletons skelmsg;
   sensor_msgs::ImageConstPtr imgmsg;
 
-  struct svm_node x[4][250];
+  std::vector<struct feature> frame;
+  struct feature x;
   int max_nr_attr;
   
   struct svm_model *model;
@@ -103,7 +107,7 @@ public:
       }
 
      
-      //  x = ( struct svm_node *) malloc ( 300 * sizeof(struct svm_node));
+      //x = ( struct svm_node *) malloc ( 250 * sizeof(struct svm_node));
 
       	if(predict_probability)
 	{
@@ -129,7 +133,7 @@ public:
 
   ~HandSaver()
   {
-    // free(x);
+    //free(x);
     svm_free_and_destroy_model(&model);
     if ( predict_probability )
     free(prob_estimates);
@@ -308,12 +312,12 @@ public:
      const double PI = 3.14159266;
      float offset_a = PI / 3.999;
 
-     float histogram[4][240];
-     for (int j = 0; j < 4; j++ )
+     float histogram[240];
+     //for (int j = 0; j < 4; j++ )
      for ( int i = 0; i < 240; i++ )
       
        {
-	 histogram[j][i] = 0.0;
+	 histogram[i] = 0.0;
 	 //	cout << histogram[i];
        }
      for ( int i = 0; i < output.points.size(); i++ )
@@ -325,9 +329,9 @@ public:
 	
 	 //if ( index < 0 || index > 239 ) cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;
 	  int index = zz * 40 + pp * 8 + aa % 8;
-	  histogram[0][ index  ] += 1.0;
+	  histogram[ index  ] += 1.0;
 
-	  index = zz * 40 + pp * 8 + (aa+2) % 8;
+	  /*	  index = zz * 40 + pp * 8 + (aa+2) % 8;
 	  histogram[1][ index  ] += 1.0;
 
 	  index = zz * 40 + pp * 8 + (aa+4) % 8;
@@ -335,23 +339,41 @@ public:
 
 	  index = zz * 40 + pp * 8 + (aa+6) % 8;
 	  histogram[3][ index  ] += 1.0;
-
+	  */
        }
      
-     for ( int j = 0; j < 4; j++)
+     // for ( int j = 0; j < 4; j++)
      for ( int i = 0; i < 240; i++ )
        {
-	 histogram[j][i] /= (float) output.points.size();
-	 x[j][i].index = i+1;
-	 x[j][i].value = histogram[j][i];
+	 histogram[i] /= (float) output.points.size();
+	 x.ft[i].index = i+1;
+	 x.ft[i].value = histogram[i];
 	 // tcout << histogram[i] << endl;
        }
      for (int j = 0; j < 4; j++)
-       x[j][240].index = -1;
-
+       x.ft[240].index = -1;
+     averageFrame();
 
   }
 
+  void averageFrame()
+  {
+    std::vector<struct feature>::iterator it;
+    it = frame.begin();
+    it = frame.insert(it, x);
+    if (frame.size() > 4 ) frame.pop_back(); 
+    for (int j = 0; j < 240; j++ )
+      { 
+	float sum = 0.0;
+	for (int i = 0; i < frame.size(); i++ )
+	  {
+	    sum += frame[i].ft[j].value;
+	  }
+	sum /= frame.size();
+	x.ft[j].value = sum;
+      }
+
+  }
   void readJointFile(char *name, arms &a)
   {
     ifstream in(name);
@@ -396,7 +418,7 @@ public:
       {
 	if (predict_probability && (svm_type==C_SVC || svm_type==NU_SVC))
 	  {
-	    predict_label = svm_predict_probability(model,x[i],prob_estimates);
+	    predict_label = svm_predict_probability(model,x.ft,prob_estimates);
 	    /*	fprintf(output,"%g",predict_label);
 		for(j=0;j<nr_class;j++)
 		fprintf(output," %g",prob_estimates[j]);
@@ -420,7 +442,7 @@ public:
 	  }
 	else
 	  {
-	    predict_label = svm_predict(model,x[i]);
+	    predict_label = svm_predict(model,x.ft);
 	    //	fprintf(output,"%g\n",predict_label);	fprintf(output,"%g\n",predict_label);
 
 	    cout << predict_label ;
@@ -443,7 +465,7 @@ public:
   {
     if (skels.skeletons.size() == 0)
       return;
-
+    count++;
     int kq;
     double t1, fps;
     t1 = g_tock(t0); t0 = g_tick();
@@ -456,7 +478,7 @@ public:
     extractArm( skels.skeletons[0], a);
     extractFeatures(handcloud, a);
     kq = predict();
-    count ++;
+    
      
      cv_bridge::CvImageConstPtr imgptr;
 
