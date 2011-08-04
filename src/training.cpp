@@ -99,9 +99,9 @@ void readJointFile(char *name, arms &a)
 
 pcl::PointXYZ draw_sample ( pcl::PointXYZ center, float error )
 {
-  float z = center.z;
-  float min = z - error / 2;
-  float max = z + error / 2;
+ 
+  float min = center.z - error / 2;
+  float max = center.z + error / 2;
 
   //boost::random::mt19937 rng;         // produces randomness out of thin air
                                     // see pseudo-random number generators
@@ -347,8 +347,7 @@ int main(int argc, char ** argv)
     {
       histogram[j][i] /= (float) output.points.size();
      
-     
-      // tcout << histogram[i] << endl;
+           // tcout << histogram[i] << endl;
     }
     
      cout << "Complete Normalized" << endl;

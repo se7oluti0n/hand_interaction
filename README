@@ -1,1 +1,10 @@
 This project is belong to MIT but i fixed it
+model file : data080302.model
+data folder : data0801 p1 p2 n1 n2 n3
+test result :
+     p1 = 299 / 319 ~ 93.70%
+     p2 = 348 / 506 ~ 68.77%
+     pp	= 416 / 620 ~ 67.09%
+     n1	= 356 / 407 ~ 78.37%
+     n2 = 295 / 379 ~ 77.83%
+     n3	= 269 / 316 ~ 76.26%
