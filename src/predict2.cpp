@@ -61,8 +61,8 @@ struct HandSaver
   body_msgs::Skeletons skelmsg;
   sensor_msgs::ImageConstPtr imgmsg;
 
-  std::vector<struct feature> frame;
-  struct feature x;
+  std::vector< std::vector<struct feature> > frame;
+  struct feature x[4];
   int max_nr_attr;
   
   struct svm_model *model;
@@ -100,6 +100,11 @@ public:
       cmd = "mkdir " + foldername;
       system(cmd.c_str());
       
+      for (int i = 0; i < 4; i++ )
+	{
+	  std::vector<struct feature> x1;
+	  frame.push_back(x1);
+	}
       if ((model = svm_load_model(name.c_str())) == 0 )
       {
 	cerr << "Can't open input file " << name << endl; 
@@ -165,7 +170,6 @@ public:
     int sample_point = 6000 / cloudin.points.size() + 1;
   
     float error = disparity_error * z * z / focal_length / baseline;
-  
     for (int i = 0; i < cloudin.points.size(); i++ )
       {
 	for ( int j = 0; j < sample_point; j++ )
@@ -312,12 +316,12 @@ public:
      const double PI = 3.14159266;
      float offset_a = PI / 3.999;
 
-     float histogram[240];
-     //for (int j = 0; j < 4; j++ )
+     float histogram[4][240];
+     for (int j = 0; j < 4; j++ )
      for ( int i = 0; i < 240; i++ )
       
        {
-	 histogram[i] = 0.0;
+	 histogram[j][i] = 0.0;
 	 //	cout << histogram[i];
        }
      for ( int i = 0; i < output.points.size(); i++ )
@@ -329,9 +333,9 @@ public:
 	
 	 //if ( index < 0 || index > 239 ) cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;
 	  int index = zz * 40 + pp * 8 + aa % 8;
-	  histogram[ index  ] += 1.0;
+	  histogram[0][ index  ] += 1.0;
 
-	  /*	  index = zz * 40 + pp * 8 + (aa+2) % 8;
+	  index = zz * 40 + pp * 8 + (aa+2) % 8;
 	  histogram[1][ index  ] += 1.0;
 
 	  index = zz * 40 + pp * 8 + (aa+4) % 8;
@@ -339,38 +343,40 @@ public:
 
 	  index = zz * 40 + pp * 8 + (aa+6) % 8;
 	  histogram[3][ index  ] += 1.0;
-	  */
+	  
        }
      
-     // for ( int j = 0; j < 4; j++)
+     for ( int j = 0; j < 4; j++)
      for ( int i = 0; i < 240; i++ )
        {
-	 histogram[i] /= (float) output.points.size();
-	 x.ft[i].index = i+1;
-	 x.ft[i].value = histogram[i];
+	 histogram[j][i] /= (float) output.points.size();
+	 x[j].ft[i].index = i+1;
+	 x[j].ft[i].value = histogram[j][i];
 	 // tcout << histogram[i] << endl;
        }
-     for (int j = 0; j < 4; j++)
-       x.ft[240].index = -1;
-     averageFrame();
-
+     for (int i= 0; i < 4; i++)
+       {
+	 for (int j = 0; j < 4; j++)
+	   x[i].ft[240].index = -1;
+	 averageFrame(i);
+       }
   }
 
-  void averageFrame()
+  void averageFrame(int ind)
   {
     std::vector<struct feature>::iterator it;
-    it = frame.begin();
-    it = frame.insert(it, x);
-    if (frame.size() > 4 ) frame.pop_back(); 
+    it = frame[ind].begin();
+    it = frame[ind].insert(it, x[ind]);
+    if (frame[ind].size() > 4 ) frame[ind].pop_back(); 
     for (int j = 0; j < 240; j++ )
       { 
 	float sum = 0.0;
-	for (int i = 0; i < frame.size(); i++ )
+	for (int i = 0; i < frame[ind].size(); i++ )
 	  {
-	    sum += frame[i].ft[j].value;
+	    sum += frame[ind][i].ft[j].value;
 	  }
-	sum /= frame.size();
-	x.ft[j].value = sum;
+	sum /= frame[ind].size();
+	x[ind].ft[j].value = sum;
       }
 
   }
@@ -418,7 +424,7 @@ public:
       {
 	if (predict_probability && (svm_type==C_SVC || svm_type==NU_SVC))
 	  {
-	    predict_label = svm_predict_probability(model,x.ft,prob_estimates);
+	    predict_label = svm_predict_probability(model,x[i].ft,prob_estimates);
 	    /*	fprintf(output,"%g",predict_label);
 		for(j=0;j<nr_class;j++)
 		fprintf(output," %g",prob_estimates[j]);
@@ -442,7 +448,7 @@ public:
 	  }
 	else
 	  {
-	    predict_label = svm_predict(model,x.ft);
+	    predict_label = svm_predict(model,x[i].ft);
 	    //	fprintf(output,"%g\n",predict_label);	fprintf(output,"%g\n",predict_label);
 
 	    cout << predict_label ;
