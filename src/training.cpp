@@ -97,11 +97,15 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
 {
   EIGEN_ALIGN16 Eigen::Vector3f eigen_values;
   EIGEN_ALIGN16 Eigen::Matrix3f eigen_vectors;
-  Eigen::Matrix3f cov;
-  Eigen::Vector4f centroid, direction,armvector;
+  // Eigen::Matrix3f cov;
+  Eigen::Vector4f centroid, dirdection,armvector;
   Eigen::Vector3f z_axis, y_axis, x_axis, origin;
 
-  Eigen::Vector3f right_arm;
+  Eigen::Vector3f right_arm, yvector;
+
+  yvector[0]  = 0;
+  yvector[1]  = 1;
+  yvector[2]  = 0;
 
   right_arm[0] = armin.right_hand.position.x - armin.right_elbow.position.x;
   right_arm[1] = armin.right_hand.position.y - armin.right_elbow.position.y;
@@ -117,21 +121,27 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
   
   double tann = right_arm[0] / right_arm[2];
   
-  right_arm[1] = armin.right_hand.position.y - armin.right_elbow.position.y;
-  
-  
+  right_arm[1] = armin.right_hand.position.y - armin.right_elbow.position.y;  
   */
+
    pcl::compute3DCentroid (cloudin, centroid);
-   pcl::computeCovarianceMatrixNormalized(cloudin,centroid,cov);
-   pcl::eigen33 (cov, eigen_vectors, eigen_values);
+   // pcl::computeCovarianceMatrixNormalized(cloudin,centroid,cov);
+   // pcl::eigen33 (cov, eigen_vectors, eigen_values);
 
    
-   z_axis[0] = eigen_vectors( 0, 2);
-   z_axis[1] = eigen_vectors( 1, 2);
-   z_axis[2] = eigen_vectors( 2, 2);
-  
-   double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
-   if ( cos < 0 ) z_axis = - z_axis;
+   z_axis[0] = right_arm[0];//eigen_vectors( 0, 2);
+   z_axis[1] = right_arm[1];//eigen_vectors( 1, 2);
+   z_axis[2] = right_arm[2];//eigen_vectors( 2, 2);
+   
+
+   x_axis = yvector.cross(right_arm);
+   double cos = right_arm.dot(y_axis) / sqrt( right_arm.norm() * y_axis.norm() );
+   if ( cos < 0 ) x_axis = - x_axis;
+    
+   y_axis = z_axis.cross(x_axis);
+
+   
+   
    /*cout << " tan: "<< tann ;
     if ( tann <= -3.7 || tann >= 3.7 ) 
       {
@@ -167,11 +177,11 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
     y_axis[2] = 0;//eigen_vectors( 2, 0);
     */
 
-    y_axis[0] = eigen_vectors( 0, 0);
+   /*  y_axis[0] = eigen_vectors( 0, 0);
     y_axis[1] = eigen_vectors( 1, 0);
     y_axis[2] = eigen_vectors( 2, 0);
 
-
+   */
     origin [ 0 ] = armin.right_hand.position.x;
     origin [ 1 ] = armin.right_hand.position.y;
     origin [ 2 ] = armin.right_hand.position.z;
@@ -260,12 +270,12 @@ int main(int argc, char ** argv)
     const double PI = 3.141592;
     float offset_a = PI / 3.999;
 
-    float histogram[4][240];
-    for (int j = 0; j < 4; j++ )
+    float histogram[240];
+   
     for ( int i = 0; i < 240; i++ )
       
       {
-	histogram[j][i] = 0.0;
+	histogram[i] = 0.0;
 	//	cout << histogram[i];
       }
      for ( int i = 0; i < output.points.size(); i++ )
@@ -280,27 +290,16 @@ int main(int argc, char ** argv)
 	    cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;
 	    exit(1);
 	  }
-	histogram[0][index] += 1.0;
-	index = zz * 40 + pp * 8 + ( aa + 2 ) % 8 ;
-
-	histogram[1][index] += 1.0;
-
-	index = zz * 40 + pp * 8   +  ( aa  + 4 ) % 8;
-	
-	histogram[2][index] += 1.0;
-
-	index = zz * 40 + pp * 8   +  ( aa  + 6 ) % 8;
-	
-	histogram[3][index] += 1.0;
+	histogram[index] += 1.0;
       }
      cout << "Complete histogram" << endl;
      filename.str("");
      filename << "histogram/" << setfill('0') << setw(4) << count << ".data";
 
-     for ( int j = 0; j < 4; j++ )
+    
      for ( int i = 0; i < 240; i++ )
     {
-      histogram[j][i] /= (float) output.points.size();
+      histogram[i] /= (float) output.points.size();
      
      
       // tcout << histogram[i] << endl;
@@ -311,23 +310,23 @@ int main(int argc, char ** argv)
      ofstream hisout(filename.str().c_str());
      for ( int i = 0; i < 240; i++ )
        {
-	 hisout << i << " " << histogram[0][i] << endl;
+	 hisout << i << " " << histogram[i] << endl;
 	 	 
        }
      
      hisout.close();
      cout << "Complete write to Histogram folder" << endl;
-     for ( int j  = 0; j < 4; j ++ ){
+    
 
        out << classs;
    
        for ( int i = 0; i < 240; i++ )
 	 {
-	   out << " " << i+1 << ":" <<  histogram[j][i];
+	   out << " " << i+1 << ":" <<  histogram[i];
 	 }
     
        out << endl;
-     }
+    
 
      cout << "Complete write to training file" << endl;
      // getTransFromUnitVectorsZY (z_axis, y_axis, transformation);

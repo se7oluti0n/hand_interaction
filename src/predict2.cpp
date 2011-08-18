@@ -199,21 +199,24 @@ public:
      Eigen::Vector3f z_axis, y_axis, x_axis, origin;
      Eigen::Affine3f transformation;
 
-     Eigen::Vector3f right_arm;
+     Eigen::Vector3f right_arm, yvector;
 
   right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
   right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
   right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
 
    pcl::compute3DCentroid (cloud, centroid);
-   pcl::computeCovarianceMatrixNormalized(cloud,centroid,cov);
-   pcl::eigen33 (cov, eigen_vectors, eigen_values);
+   //pcl::computeCovarianceMatrixNormalized(cloud,centroid,cov);
+   //pcl::eigen33 (cov, eigen_vectors, eigen_values);
 
    
-    z_axis[0] = eigen_vectors( 0, 2);
-    z_axis[1] = eigen_vectors( 1, 2);
-    z_axis[2] = eigen_vectors( 2, 2);
-    
+   z_axis[0] = right_arm[0];//eigen_vectors( 0, 2);
+   z_axis[1] = right_arm[1];//eigen_vectors( 1, 2);
+   z_axis[2] = right_arm[2];// eigen_vectors( 2, 2);
+   
+   yvector[0]  = 0;
+   yvector[1]  = 1;
+   yvector[2]  = 0; 
     /*  y_axis[0] = eigen_vectors( 0, 0);
     y_axis[1] = eigen_vectors( 1, 0);
     y_axis[2] = eigen_vectors( 2, 0);
@@ -223,14 +226,23 @@ public:
     origin [ 2 ] = centroid[2];
     */
 
-    double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
-   if ( cos < 0 ) z_axis = - z_axis;
+   x_axis = yvector.cross(right_arm);
+   double cos = right_arm.dot(y_axis) / sqrt( right_arm.norm() * y_axis.norm() );
+   if ( cos < 0 ) x_axis = - x_axis;
+    
+   y_axis = z_axis.cross(x_axis);
+
+
+
+
+   //    double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
+   //if ( cos < 0 ) z_axis = - z_axis;
    // cout << " tan: "<< tann ;
     
-   y_axis[0] = eigen_vectors( 0, 0);
+   /*y_axis[0] = eigen_vectors( 0, 0);
    y_axis[1] = eigen_vectors( 1, 0);
    y_axis[2] = eigen_vectors( 2, 0);
-  
+   */
     origin [ 0 ] = skel.right_hand.position.x;
     origin [ 1 ] = skel.right_hand.position.y;
     origin [ 2 ] = skel.right_hand.position.z;
