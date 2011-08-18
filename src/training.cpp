@@ -135,11 +135,13 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
    
 
    x_axis = yvector.cross(right_arm);
-   double cos = right_arm.dot(y_axis) / sqrt( right_arm.norm() * y_axis.norm() );
+   double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
    if ( cos < 0 ) x_axis = - x_axis;
     
    y_axis = z_axis.cross(x_axis);
-
+   x_axis.normalize();
+   y_axis.normalize();
+   z_axis.normalize();
    
    
    /*cout << " tan: "<< tann ;
@@ -284,7 +286,7 @@ int main(int argc, char ** argv)
 	int pp = floor (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
 	int aa = floor(( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
 
-        int index = zz * 40 + pp * 8 + aa;
+        int index = zz * 40 + pp * 8 + aa % 8;
 	if ( index < 0 || index > 239 ) 
 	  {
 	    cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;

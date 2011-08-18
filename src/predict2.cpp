@@ -39,11 +39,12 @@ struct arms
   body_msgs::SkeletonJoint right_hand;
   body_msgs::SkeletonJoint right_elbow;
 };
-struct svm_node *x;
-int max_nr_attr = 64;
 
-struct svm_model* model;
-int predict_probability=0;
+struct feature
+{
+  struct svm_node ft[250];
+};
+
 
 
 struct HandSaver
@@ -55,7 +56,8 @@ struct HandSaver
   body_msgs::Skeletons skelmsg;
   sensor_msgs::ImageConstPtr imgmsg;
 
-  struct svm_node *x;
+  std::vector<struct feature> frame;
+  struct feature x;
   int max_nr_attr;
   
   struct svm_model *model;
@@ -100,7 +102,7 @@ public:
       }
 
      
-      x = ( struct svm_node *) malloc ( 300 * sizeof(struct svm_node));
+      //   x = ( struct svm_node *) malloc ( 300 * sizeof(struct svm_node));
 
       	if(predict_probability)
 	{
@@ -125,12 +127,47 @@ public:
 
   ~HandSaver()
   {
-    free(x);
+    // free(x);
     svm_free_and_destroy_model(&model);
     if ( predict_probability )
     free(prob_estimates);
   }
+    pcl::PointXYZ draw_sample ( pcl::PointXYZ center, float error )
+  {
+    float z = center.z;
+    float min = z - error / 2;
+    float max = z + error / 2;
+
+    //boost::random::mt19937 rng;         // produces randomness out of thin air
+    // see pseudo-random number generators
+    boost::uniform_real<> u(min,max);
+    // distribution that maps to 1..6
+    // see random number distributions
+    float x = u(gen);                   // simulate rolling a die
+
+    return pcl::PointXYZ( center.x, center.y, x );
+
+  } 
+  void resample( pcl::PointCloud<pcl::PointXYZ> & cloudin, pcl::PointCloud<pcl::PointXYZ> & cloudout, arms  &armin )
+  {
+    float baseline = 0.07219;
+    float disparity_error = 0.17;
+    float focal_length = 580;
+    float z = armin.right_hand.position.z;
+    int sample_point = 6000 / cloudin.points.size() + 1;
   
+    float error = disparity_error * z * z / focal_length / baseline;
+  
+    for (int i = 0; i < cloudin.points.size(); i++ )
+      {
+	for ( int j = 0; j < sample_point; j++ )
+	  cloudout.push_back( draw_sample ( cloudin.points[i], error));
+      }
+
+
+
+  }
+
 
   // \brief This function tries to sync the skeleton and point cloud messages 
   void messageSync()
@@ -188,9 +225,9 @@ public:
   }
 
 
-  void extractFeatures( pcl::PointCloud<pcl::PointXYZ> cloud, arms &skel )
+  void extractFeatures( pcl::PointCloud<pcl::PointXYZ> cloud2, arms &skel )
   {
-     pcl::PointCloud<pcl::PointXYZ> output;
+    pcl::PointCloud<pcl::PointXYZ> output, cloud;
      EIGEN_ALIGN16 Eigen::Vector3f eigen_values;
      EIGEN_ALIGN16 Eigen::Matrix3f eigen_vectors;
      Eigen::Matrix3f cov;
@@ -201,6 +238,7 @@ public:
 
      Eigen::Vector3f right_arm, yvector;
 
+     resample(cloud2, cloud, skel);
   right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
   right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
   right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
@@ -227,11 +265,14 @@ public:
     */
 
    x_axis = yvector.cross(right_arm);
-   double cos = right_arm.dot(y_axis) / sqrt( right_arm.norm() * y_axis.norm() );
+   double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
    if ( cos < 0 ) x_axis = - x_axis;
     
    y_axis = z_axis.cross(x_axis);
-
+   
+   x_axis.normalize();
+   y_axis.normalize();
+   z_axis.normalize();
 
 
 
@@ -293,7 +334,7 @@ public:
 	int pp = (int) (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
 	int aa = (int) (( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
 
-        int index = zz * 40 + pp * 8 + aa;
+        int index = zz * 40 + pp * 8 + aa % 8;
 	//if ( index < 0 || index > 239 ) cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;
 	
 	histogram[ index  ] += 1.0;
@@ -303,12 +344,31 @@ public:
      for ( int i = 0; i < 240; i++ )
     {
       histogram[i] /= (float) output.points.size();
-      x[i].index = i+1;
-      x[i].value = histogram[i];
+      x.ft[i].index = i+1;
+      x.ft[i].value = histogram[i];
       // tcout << histogram[i] << endl;
     }
-     x[240].index = -1;
+     x.ft[240].index = -1;
 
+
+  }
+
+    void averageFrame()
+  {
+    std::vector<struct feature>::iterator it;
+    it = frame.begin();
+    it = frame.insert(it, x);
+    if (frame.size() > 4 ) frame.pop_back(); 
+    for (int j = 0; j < 240; j++ )
+      { 
+	float sum = 0.0;
+	for (int i = 0; i < frame.size(); i++ )
+	  {
+	    sum += frame[i].ft[j].value;
+	  }
+	sum /= frame.size();
+	x.ft[j].value = sum;
+      }
 
   }
 
@@ -353,7 +413,7 @@ public:
     int kq;
    if (predict_probability && (svm_type==C_SVC || svm_type==NU_SVC))
      {
-			predict_label = svm_predict_probability(model,x,prob_estimates);
+			predict_label = svm_predict_probability(model,x.ft,prob_estimates);
 			/*	fprintf(output,"%g",predict_label);
 			for(j=0;j<nr_class;j++)
 				fprintf(output," %g",prob_estimates[j]);
@@ -376,7 +436,7 @@ public:
 		}
     else
 		{
-			predict_label = svm_predict(model,x);
+			predict_label = svm_predict(model,x.ft);
 			//	fprintf(output,"%g\n",predict_label);	fprintf(output,"%g\n",predict_label);
 
 				cout << predict_label ;
@@ -398,7 +458,7 @@ public:
   {
     if (skels.skeletons.size() == 0)
       return;
-
+    count ++;
     int kq;
     double t1, fps;
     t1 = g_tock(t0); t0 = g_tick();
@@ -411,7 +471,7 @@ public:
     extractArm( skels.skeletons[0], a);
     extractFeatures(handcloud, a);
     kq = predict();
-    count ++;
+
      
      cv_bridge::CvImageConstPtr imgptr;
 

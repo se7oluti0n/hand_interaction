@@ -394,6 +394,30 @@ public:
        //eigen eigen_values(1)/eigen_values(2) < .4 means closed fist, unless you are pointing at the kinect
 
        //make polygon
+       Eigen::Vector3f  arm1,yvec, xxis, yxis, zxis;
+       arm1[0] = h.palm.translation.x - h.arm.x;
+       arm1[1] = h.palm.translation.y - h.arm.y;
+       arm1[2] = h.palm.translation.z - h.arm.z;
+
+       yvec[0] = 0;
+       yvec[1] = 1;
+       yvec[2] = 0;
+       
+       zxis = arm1;
+       xxis = yvec.cross(arm1);
+        double cos = arm1.dot(zxis) / sqrt( arm1.norm() * zxis.norm() );
+	if ( cos < 0 ) xxis = - xxis;
+	
+	
+	yxis = zxis.cross(xxis);
+	zxis.normalize();
+	yxis.normalize();
+	xxis.normalize();
+	
+	direction(0)= zxis[0];
+	direction(1)= zxis[1];
+	direction(2)= zxis[2];
+
        geometry_msgs::Polygon p1;
        p1.points.push_back(eigenToMsgPoint32(centroid));
        p1.points.push_back(eigenToMsgPoint32(centroid+direction));
@@ -401,20 +425,26 @@ public:
        pca1pmap.header=h.handcloud.header;
 
 
-       direction(0)=eigen_vectors (0, 1);
+       /*direction(0)=eigen_vectors (0, 1);
        direction(1)=eigen_vectors (1, 1);
        direction(2)=eigen_vectors (2, 1);
-
+       */
+       direction(0)= xxis[0];
+	direction(1)= xxis[1];
+	direction(2)= xxis[2];
        geometry_msgs::Polygon p2;
        p2.points.push_back(eigenToMsgPoint32(centroid));
        p2.points.push_back(eigenToMsgPoint32(centroid+direction));
        pca2pmap.polygons.push_back(p2);
        pca2pmap.header=h.handcloud.header;
 
-       direction(0)=eigen_vectors (0, 2);
+       /*direction(0)=eigen_vectors (0, 2);
        direction(1)=eigen_vectors (1, 2);
        direction(2)=eigen_vectors (2, 2);
-
+       */
+       direction(0)= yxis[0];
+       direction(1)= yxis[1];
+       direction(2)= yxis[2];
        geometry_msgs::Polygon p3;
        p3.points.push_back(eigenToMsgPoint32(centroid));
        p3.points.push_back(eigenToMsgPoint32(centroid+direction));
