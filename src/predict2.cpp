@@ -1,3 +1,5 @@
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_real.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
@@ -46,7 +48,7 @@ struct feature
 };
 
 
-
+boost::mt19937 gen;
 struct HandSaver
 {
  private:
@@ -318,7 +320,7 @@ public:
     origin[2] = min_pt.z;
     
     float offset_z = (max_pt.z - min_pt.z) / 5.999;
-    const double PI = 3.141592;
+    const double PI = 3.14159266;
     float offset_a = PI / 3.999;
 
     float histogram[240];
