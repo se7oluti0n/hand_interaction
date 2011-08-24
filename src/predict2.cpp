@@ -239,12 +239,13 @@ public:
      Eigen::Affine3f transformation;
 
      Eigen::Vector3f right_arm, yvector;
-
+     float arm_length;
      resample(cloud2, cloud, skel);
   right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
   right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
   right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
 
+  arm_length = right_arm.norm();
    pcl::compute3DCentroid (cloud, centroid);
    //pcl::computeCovarianceMatrixNormalized(cloud,centroid,cov);
    //pcl::eigen33 (cov, eigen_vectors, eigen_values);
@@ -304,7 +305,7 @@ public:
    // r /= 4;
 
       
-    float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
+   /* float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
     float r2 = min_pt.y * min_pt.y + min_pt.x * min_pt.x;
     float r3 = max_pt.y * max_pt.y + min_pt.x * min_pt.x;
     float r4 = min_pt.y * min_pt.y + max_pt.x * max_pt.x;
@@ -314,12 +315,13 @@ public:
     float r = r1 > r2?r1:r2;
     r = r > r3?r:r3;
     r = r > r4?r:r4;
-
+   */
+   float  r = 0.8 * arm_length;
     
     float offset_r = r / 4.999;
     origin[2] = min_pt.z;
     
-    float offset_z = (max_pt.z - min_pt.z) / 5.999;
+    float offset_z = 0.8 * arm_length / 5.999;
     const double PI = 3.14159266;
     float offset_a = PI / 3.999;
 
@@ -333,7 +335,9 @@ public:
      for ( int i = 0; i < output.points.size(); i++ )
       {
 	int zz = floor (( output.points[i].z - origin[2] ) / offset_z);
+	zz = ( zz > 5? 5 : zz );
 	int pp = (int) (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
+	pp = ( pp > 4? 4 : pp );
 	int aa = (int) (( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
 
         int index = zz * 40 + pp * 8 + aa % 8;

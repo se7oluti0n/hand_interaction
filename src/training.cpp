@@ -26,34 +26,6 @@
 
 using namespace std;
 
-/*void getTransFromUnitVectorsZY(const Eigen::Vector3f& z_axis, const Eigen::Vector3f& y_direction, Eigen::Affine3f& transformation)
-{
-   Eigen::Vector3f tmp0 = (z_axis.cross(y_direction)).normalized();
-   Eigen::Vector3f tmp1 = (z_axis.cross(tmp0)).normalized();
-   Eigen::Vector3f tmp2 = z_axis.normalized();
-   
-   transformation(0,0)=tmp0[0]; transformation(0,1)=tmp0[1]; transformation(0,2)=tmp0[2]; transformation(0,3)=0.0f;
-   transformation(1,0)=tmp1[0]; transformation(1,1)=tmp1[1]; transformation(1,2)=tmp1[2]; transformation(1,3)=0.0f;
-   transformation(2,0)=tmp2[0]; transformation(2,1)=tmp2[1]; transformation(2,2)=tmp2[2]; transformation(2,3)=0.0f;
-   transformation(3,0)=0.0f;    transformation(3,1)=0.0f;    transformation(3,2)=0.0f;    transformation(3,3)=1.0f;
-}
-
-
-void getTransformationFromTwoUnitVectors(const Eigen::Vector3f& y_direction, const Eigen::Vector3f& z_axis, Eigen::Affine3f& transformation)
-{
-   getTransFromUnitVectorsZY(z_axis, y_direction, transformation);
-}
-
-
-void getTransformationFromTwoUnitVectorsAndOrigin(const Eigen::Vector3f& y_direction, const Eigen::Vector3f& z_axis,
-                                                   const Eigen::Vector3f& origin, Eigen::Affine3f& transformation)
- {
-  getTransformationFromTwoUnitVectors(y_direction, z_axis, transformation);
-  Eigen::Vector3f translation = transformation*origin;
-  transformation(0,3)=-translation[0];  transformation(1,3)=-translation[1];  transformation(2,3)=-translation[2];
-}
-
-*/
 boost::mt19937 gen;
 struct arms
 {
@@ -95,7 +67,12 @@ void readJointFile(char *name, arms &a)
   in >> a.right_elbow.confidence;
   
 }
-
+/* \brief : Resampling point from given center point and error
+ *
+ *
+ *
+ *
+ */
 pcl::PointXYZ draw_sample ( pcl::PointXYZ center, float error )
 {
  
@@ -111,7 +88,13 @@ pcl::PointXYZ draw_sample ( pcl::PointXYZ center, float error )
   
   return pcl::PointXYZ( center.x, center.y, x );
 
-} 
+}
+/* \brief 
+ * 
+ *
+ *
+ *
+ */ 
 void resample( pcl::PointCloud<pcl::PointXYZ> & cloudin, pcl::PointCloud<pcl::PointXYZ> & cloudout, arms &armin )
 {
   float baseline = 0.07219;
@@ -131,8 +114,13 @@ void resample( pcl::PointCloud<pcl::PointXYZ> & cloudin, pcl::PointCloud<pcl::Po
 
 
 }
-
-void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eigen::Affine3f &transformation)
+/* \brief : Transform a Pointcloud from Kinect coordinator to Hand Coordinator
+ *
+ *
+ *
+ *
+ */
+void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eigen::Affine3f &transformation, float & arm_length)
 {
   EIGEN_ALIGN16 Eigen::Vector3f eigen_values;
   EIGEN_ALIGN16 Eigen::Matrix3f eigen_vectors;
@@ -149,6 +137,8 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
   right_arm[0] = armin.right_hand.position.x - armin.right_elbow.position.x;
   right_arm[1] = armin.right_hand.position.y - armin.right_elbow.position.y;
   right_arm[2] = armin.right_hand.position.z - armin.right_elbow.position.z;
+  
+  arm_length = right_arm.norm();
   /*
   zvector[0] = 0;
   zvector[1] = 0;
@@ -252,7 +242,8 @@ int main(int argc, char ** argv)
   while ( ! pcdin.eof() )
   {
     pcl::PointCloud<pcl::PointXYZ> cloud, cloud2, output;
-     Eigen::Affine3f transformation;
+    Eigen::Affine3f transformation;
+    float arm_length;
  
     cout << "Start processing file " << count << endl;
     char name[256];
@@ -270,7 +261,7 @@ int main(int argc, char ** argv)
    readJointFile(name, aa);
    cout << count << " : " ;
    resample( cloud, cloud2, aa);
-   getTransfromation( cloud2, aa, transformation);
+   getTransfromation( cloud2, aa, transformation, arm_length);
    pcl::getTransformedPointCloud (cloud2, transformation, output);
 
    pcl::PointXYZ min_pt, max_pt;
@@ -294,7 +285,7 @@ int main(int argc, char ** argv)
     
     
     
-    float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
+    /* float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
     float r2 = min_pt.y * min_pt.y + min_pt.x * min_pt.x;
     float r3 = max_pt.y * max_pt.y + min_pt.x * min_pt.x;
     float r4 = min_pt.y * min_pt.y + max_pt.x * max_pt.x;
@@ -304,12 +295,13 @@ int main(int argc, char ** argv)
     float r = r1 > r2?r1:r2;
     r = r > r3?r:r3;
     r = r > r4?r:r4;
-
+    */
+    float r = 0.8 * arm_length;
     
     float offset_r = r /4.999;
     origin[2] = min_pt.z;
     
-    float offset_z = (max_pt.z - min_pt.z) / 5.999;
+    float offset_z = 0.8 * arm_length / 5.999;
     const double PI = 3.14159266;
     float offset_a = PI / 3.999;
 
@@ -324,7 +316,9 @@ int main(int argc, char ** argv)
      for ( int i = 0; i < output.points.size(); i++ )
       {
 	int zz = floor (( output.points[i].z - origin[2] ) / offset_z);
+	zz = ( zz > 5?5:zz);
 	int pp = floor (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
+	pp = ( pp > 4?4:pp);
 	int aa = floor(( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
 
         int index = zz * 40 + pp * 8 + aa % 8;
