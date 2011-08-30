@@ -305,7 +305,7 @@ public:
    // r /= 4;
 
       
-   /* float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
+   /*float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
     float r2 = min_pt.y * min_pt.y + min_pt.x * min_pt.x;
     float r3 = max_pt.y * max_pt.y + min_pt.x * min_pt.x;
     float r4 = min_pt.y * min_pt.y + max_pt.x * max_pt.x;
@@ -316,16 +316,18 @@ public:
     r = r > r3?r:r3;
     r = r > r4?r:r4;
    */
-   float  r = 0.8 * arm_length;
-    
+   //cout << "R: " << r << endl;
+    float r = 0.4 * arm_length;
+    r = r*r ;
     float offset_r = r / 4.999;
     origin[2] = min_pt.z;
     
-    float offset_z = 0.8 * arm_length / 5.999;
+    float offset_z = 0.7 * arm_length / 5.999;
     const double PI = 3.14159266;
     float offset_a = PI / 3.999;
 
     float histogram[240];
+    cout << "Max length : " << max_pt.z - min_pt.z << endl; 
     for ( int i = 0; i < 240; i++ )
       
       {

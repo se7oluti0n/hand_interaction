@@ -6,3 +6,10 @@ Result 1:
        337 / 409
        300 / 379
        225 / 316 
+
+Result 08/29/2011 2:05 PM  :
+       P1 : True Positive 308 / 319 ~ 96.55 %
+       P2 : True Positive 420 / 506 ~ 83.00 %
+       N1 : True Negative 263 / 407 ~ 64.61 %
+       N2 : True Negative 298 / 379 ~ 78.63 %
+       N3 : True Negative 239 / 316 ~ 75.63 %

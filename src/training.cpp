@@ -139,6 +139,7 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
   right_arm[2] = armin.right_hand.position.z - armin.right_elbow.position.z;
   
   arm_length = right_arm.norm();
+  cout << "Arm length: " << arm_length << endl;
   /*
   zvector[0] = 0;
   zvector[1] = 0;
@@ -262,6 +263,7 @@ int main(int argc, char ** argv)
    cout << count << " : " ;
    resample( cloud, cloud2, aa);
    getTransfromation( cloud2, aa, transformation, arm_length);
+   cout << "Arm Length 2 : " << arm_length << endl;
    pcl::getTransformedPointCloud (cloud2, transformation, output);
 
    pcl::PointXYZ min_pt, max_pt;
@@ -296,12 +298,16 @@ int main(int argc, char ** argv)
     r = r > r3?r:r3;
     r = r > r4?r:r4;
     */
-    float r = 0.8 * arm_length;
+    cout << "Max length : " << max_pt.z - min_pt.z << endl;
+    //cout << "R : " << r << endl;
+    float r = 0.4 * arm_length;
+    r = r*r;
+    cout << "R2 : " << r * r << endl;
     
     float offset_r = r /4.999;
     origin[2] = min_pt.z;
     
-    float offset_z = 0.8 * arm_length / 5.999;
+    float offset_z = 0.7 * arm_length / 5.999;
     const double PI = 3.14159266;
     float offset_a = PI / 3.999;
 
