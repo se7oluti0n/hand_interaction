@@ -9,9 +9,10 @@
 #include <sensor_msgs/PointCloud.h>
 #include <body_msgs/Hands.h>
 #include <sensor_msgs/point_cloud_conversion.h>
+#include <sensor_msgs/image_encodings.h>
 #include <pcl_tools/pcl_utils.h>
 //#include <pcl_tools/segfast.hpp>
-#include "pcl/common/transform.hpp"
+#include "pcl/common/transform.h"
 #include "pcl/io/pcd_io.h"
 #include "pcl/point_types.h"
 #include <pcl/ModelCoefficients.h>

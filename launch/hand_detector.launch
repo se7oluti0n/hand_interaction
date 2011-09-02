@@ -5,7 +5,7 @@
   
 
   <!-- run hand detection -->
-  <node pkg="hand_interaction" type="detectskelhands" name="handdetector"  output="screen"  >
+  <node pkg="hand_interaction" type="detectskelhands" name="handdetector"  output="screen" respawn="true" >
   </node>
 	
 	

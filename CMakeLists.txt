@@ -16,6 +16,7 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 #set the default path for built libraries to the "lib" directory
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
+
 #uncomment if you have defined messages
 #rosbuild_genmsg()
 #uncomment if you have defined services
@@ -32,6 +33,11 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 rosbuild_add_executable(analyzehands src/analyze_hands.cpp)
 target_link_libraries(analyzehands pcl_utils)
 
+rosbuild_add_executable(pointing src/pointing_area.cpp)
+target_link_libraries(pointing pcl_utils)
+
+rosbuild_add_executable(visual src/visual.cpp)
+target_link_libraries(visual pcl_utils)
 rosbuild_add_executable(training src/training.cpp)
 target_link_libraries(training pcl_utils)
 
@@ -44,8 +50,8 @@ target_link_libraries(detecthands pcl_utils)
 rosbuild_add_executable(saver src/saveHandCloud.cpp)
 target_link_libraries(saver pcl_utils)
 
-rosbuild_add_executable(predict src/predict.cpp src/svm.cpp)
-target_link_libraries(predict pcl_utils)
+#rosbuild_add_executable(predict src/predict.cpp src/svm.cpp)
+#target_link_libraries(predict pcl_utils)
 
 rosbuild_add_executable(predict2 src/predict2.cpp src/svm.cpp)
 target_link_libraries(predict2 pcl_utils)

@@ -9,17 +9,19 @@
 #include <sensor_msgs/PointCloud.h>
 #include <body_msgs/Hands.h>
 #include <sensor_msgs/point_cloud_conversion.h>
+#include <sensor_msgs/image_encodings.h>
 #include <pcl_tools/pcl_utils.h>
 //#include <pcl_tools/segfast.hpp>
 
-#include "pcl/common/transform.hpp"
+#include "pcl/common/transform.h"
 #include "pcl/io/pcd_io.h"
 #include "pcl/point_types.h"
 //#include <pcl/ModelCoefficients.h>
 
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
-
+#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/visualization/pcl_visualizer.h>
 #include <sstream>
 #include <iostream>
 #include <fstream>
@@ -47,17 +49,48 @@ struct feature
   struct svm_node ft[250];
 };
 
-
+vector<pcl::ModelCoefficients> coeffs;
+//vector<vtkSmartPointer< vtkPolyData >> circles; 
 boost::mt19937 gen;
+pcl::visualization::CloudViewer viewer("Cloud Viewer");
+//boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("Features Visual Viewer"));
+
+ void visual (pcl::visualization::PCLVisualizer& viewera)
+  {
+    string id;
+    char c='a';
+   
+    /*  viewer->removePointCloud();
+    boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+    viewer->setBackgroundColor (0, 0, 0);
+    viewer->addPointCloud<pcl::PointXYZ> (cloud);
+    viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1);
+    viewer->addCoordinateSystem (1.0);
+    // viewer->initCameraParameters ();
+    */
+    id = "circle";
+    
+    for (int i = 0; i < coeffs.size(); i++ )
+      {
+	id+=c;
+	viewera.removeShape(id);
+	viewera.addCylinder(coeffs[i], id); 
+	viewera.setShapeRenderingProperties( pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 1, id);
+      }
+
+    //viewer->spinOnce (100);
+    //boost::this_thread::sleep (boost::posix_time::microseconds (100000));
+  } 
 struct HandSaver
 {
  private:
   ros::NodeHandle n_;
   ros::Subscriber cloudsub_, skelsub_, imgsub_;
+  ros::Publisher handpub_[2];
   sensor_msgs::PointCloud2 pcloudmsg;
   body_msgs::Skeletons skelmsg;
   sensor_msgs::ImageConstPtr imgmsg;
-
+  
   std::vector<struct feature> frame;
   struct feature x;
   int max_nr_attr;
@@ -75,6 +108,9 @@ struct HandSaver
   int svm_type, nr_class;
   double *prob_estimates;
   int online;
+
+ 
+  
 public:
   
   HandSaver(std::string name_, int saveChoice, string folder, int onl = 1):foldername(folder), name(name_), predict_probability(1), max_nr_attr(64), save(saveChoice), online(onl)
@@ -84,6 +120,8 @@ public:
 	  cloudsub_ = n_.subscribe("hand1_fullcloud", 1, &HandSaver::cloudcb, this);      
 	  skelsub_ = n_.subscribe("/skeletons", 1, &HandSaver::skelcb, this);
 	  imgsub_  = n_.subscribe("/camera/rgb/image_color", 1, &HandSaver::imgcb, this);
+	  handpub_[0] = n_.advertise<sensor_msgs::PointCloud2> ("transformed_handcloud", 1);
+	  handpub_[1] = n_.advertise<sensor_msgs::PointCloud2> ("resample_handcloud", 1);
 	}
       count = 0;
       pos = 0;
@@ -124,6 +162,7 @@ public:
     nr_class=svm_get_nr_class(model);
     prob_estimates = (double *) malloc(nr_class*sizeof(double));
      
+  
     if ( !online ) Process();
     }
 
@@ -146,7 +185,7 @@ public:
     // distribution that maps to 1..6
     // see random number distributions
     float x = u(gen);                   // simulate rolling a die
-
+    
     return pcl::PointXYZ( center.x, center.y, x );
 
   } 
@@ -164,10 +203,11 @@ public:
       {
 	for ( int j = 0; j < sample_point; j++ )
 	  cloudout.push_back( draw_sample ( cloudin.points[i], error));
+       
       }
 
 
-
+    
   }
 
 
@@ -229,7 +269,8 @@ public:
 
   void extractFeatures( pcl::PointCloud<pcl::PointXYZ> cloud2, arms &skel )
   {
-    pcl::PointCloud<pcl::PointXYZ> output, cloud;
+    pcl::PointCloud<pcl::PointXYZ>  output, cloud;
+    // pcl::PointCloud<pcl::PointXYZ>::ptr output ( new pcl::PointCloud<pcl::PointXYZ> );
      EIGEN_ALIGN16 Eigen::Vector3f eigen_values;
      EIGEN_ALIGN16 Eigen::Matrix3f eigen_vectors;
      Eigen::Matrix3f cov;
@@ -240,12 +281,16 @@ public:
 
      Eigen::Vector3f right_arm, yvector;
      float arm_length;
+     //viewer.showCloud(cloud2);
+     sensor_msgs::PointCloud2 trans1, trans2;
+      
+     
      resample(cloud2, cloud, skel);
   right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
   right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
   right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
 
-  arm_length = right_arm.norm();
+   arm_length = right_arm.norm();
    pcl::compute3DCentroid (cloud, centroid);
    //pcl::computeCovarianceMatrixNormalized(cloud,centroid,cov);
    //pcl::eigen33 (cov, eigen_vectors, eigen_values);
@@ -287,14 +332,22 @@ public:
    y_axis[1] = eigen_vectors( 1, 0);
    y_axis[2] = eigen_vectors( 2, 0);
    */
-    origin [ 0 ] = skel.right_hand.position.x;
-    origin [ 1 ] = skel.right_hand.position.y;
-    origin [ 2 ] = skel.right_hand.position.z;
+   origin [ 0 ] = skel.right_hand.position.x;
+   origin [ 1 ] = skel.right_hand.position.y;
+   origin [ 2 ] = skel.right_hand.position.z;
 
 
    pcl::getTransformationFromTwoUnitVectorsAndOrigin(y_axis, z_axis, origin, transformation);
 
    pcl::getTransformedPointCloud (cloud, transformation, output);
+   
+   // if ( output.is_dense)
+   
+   pcl::toROSMsg( output, trans1 );
+   trans1.header = pcloudmsg.header;
+   handpub_[0].publish( trans1 );
+   
+   
 
    pcl::PointXYZ min_pt, max_pt;
 
@@ -334,6 +387,61 @@ public:
 	histogram[i] = 0.0;
 	//	cout << histogram[i];
       }
+
+    /*********************************************
+
+          
+          Make model co
+
+
+     *********************************************/
+    // vector<pcl::ModelCoefficients> coeffs;
+    coeffs.clear();
+    pcl::ModelCoefficients tmp;
+    tmp.values.push_back(0.0);
+    tmp.values.push_back(0.0);
+    // tmp.values.push_back(0.4*arm_length);
+    tmp.values.push_back(min_pt.z);
+
+    tmp.values.push_back(0.0);
+    tmp.values.push_back(0.0);
+    tmp.values.push_back(1.0);
+
+    tmp.values.push_back(0.4 * arm_length);
+    
+    coeffs.push_back(tmp);
+
+    /*   for (int i = 1; i < 7; i++ )
+    { 
+      tmp.values[3]+= offset_z;
+      coeffs.push_back(tmp);      
+      }
+    
+    */
+    /*  circles.clear();
+    pcl::ModelCoefficients tmp;
+    tmp.values.push_back(0.0);
+    tmp.values.push_back(0.0);
+    tmp.values.push_back(0.4 * arm_length);
+
+    float zzz = min_pt.z;
+    for (int i = 0; i < 7 ; i++ )
+      {
+	
+	vtkSmartPointer<vtkDataSet> data = pcl::visualization::create2DCircle (tmp, zzz);
+	circles.push_back(data);
+	zzz+= offset_z;
+	}*/
+    //  visual(output.makeShared(), coeffs);
+
+    if (output.is_dense)
+      {
+	viewer.showCloud(output.makeShared());
+	viewer.runOnVisualizationThreadOnce(visual);
+      }
+    /*************************************************/
+
+
      for ( int i = 0; i < output.points.size(); i++ )
       {
 	int zz = floor (( output.points[i].z - origin[2] ) / offset_z);

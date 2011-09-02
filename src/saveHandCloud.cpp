@@ -5,6 +5,7 @@
 #include <ros/ros.h>
 #include <body_msgs/Skeletons.h>
 #include <sensor_msgs/PointCloud.h>
+#include <sensor_msgs/image_encodings.h>
 #include <body_msgs/Hands.h>
 #include <sensor_msgs/point_cloud_conversion.h>
 #include <pcl_tools/pcl_utils.h>
