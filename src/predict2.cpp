@@ -10,14 +10,13 @@
 #include <body_msgs/Hands.h>
 #include <sensor_msgs/point_cloud_conversion.h>
 #include <sensor_msgs/image_encodings.h>
+#include <std_msgs/Bool.h>
 #include <pcl_tools/pcl_utils.h>
 //#include <pcl_tools/segfast.hpp>
 
-#include "pcl/common/transform.h"
-#include "pcl/io/pcd_io.h"
-#include "pcl/point_types.h"
-//#include <pcl/ModelCoefficients.h>
-
+#include <pcl/common/impl/angles.hpp>
+#include <pcl/common/transform.h>
+#include <pcl/ModelCoefficients.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 #include <pcl/visualization/cloud_viewer.h>
@@ -53,12 +52,13 @@ vector<pcl::ModelCoefficients> coeffs;
 //vector<vtkSmartPointer< vtkPolyData >> circles; 
 boost::mt19937 gen;
 pcl::visualization::CloudViewer viewer("Cloud Viewer");
+pcl::PointCloud<pcl::PointXYZ> cylinder_cloud;
 //boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("Features Visual Viewer"));
 
- void visual (pcl::visualization::PCLVisualizer& viewera)
+void visual (pcl::visualization::PCLVisualizer& viewera)
   {
-    string id;
-    char c='a';
+    //string id;
+    //char c='a';
    
     /*  viewer->removePointCloud();
     boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
@@ -67,26 +67,36 @@ pcl::visualization::CloudViewer viewer("Cloud Viewer");
     viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1);
     viewer->addCoordinateSystem (1.0);
     // viewer->initCameraParameters ();
-    */
-    id = "circle";
     
-    for (int i = 0; i < coeffs.size(); i++ )
+    */
+
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> single_color(cylinder_cloud.makeShared(), 0, 255, 0);
+    viewera.removePointCloud("cylinder");
+    viewera.addPointCloud<pcl::PointXYZ> (cylinder_cloud.makeShared(), single_color,  "cylinder");
+    viewera.setPointCloudRenderingProperties( pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1.0, "cylinder");
+    viewera.setPointCloudRenderingProperties( pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1.0, 0, "cylinder");
+    
+    //id = "circle";
+    
+    /*for (int i = 0; i < coeffs.size(); i++ )
       {
 	id+=c;
 	viewera.removeShape(id);
 	viewera.addCylinder(coeffs[i], id); 
 	viewera.setShapeRenderingProperties( pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 1, id);
       }
-
+     */
     //viewer->spinOnce (100);
     //boost::this_thread::sleep (boost::posix_time::microseconds (100000));
-  } 
+} 
+
+
 struct HandSaver
 {
  private:
   ros::NodeHandle n_;
   ros::Subscriber cloudsub_, skelsub_, imgsub_;
-  ros::Publisher handpub_[2];
+  ros::Publisher is_pointingpub_;
   sensor_msgs::PointCloud2 pcloudmsg;
   body_msgs::Skeletons skelmsg;
   sensor_msgs::ImageConstPtr imgmsg;
@@ -109,7 +119,7 @@ struct HandSaver
   double *prob_estimates;
   int online;
 
- 
+  
   
 public:
   
@@ -120,8 +130,8 @@ public:
 	  cloudsub_ = n_.subscribe("hand1_fullcloud", 1, &HandSaver::cloudcb, this);      
 	  skelsub_ = n_.subscribe("/skeletons", 1, &HandSaver::skelcb, this);
 	  imgsub_  = n_.subscribe("/camera/rgb/image_color", 1, &HandSaver::imgcb, this);
-	  handpub_[0] = n_.advertise<sensor_msgs::PointCloud2> ("transformed_handcloud", 1);
-	  handpub_[1] = n_.advertise<sensor_msgs::PointCloud2> ("resample_handcloud", 1);
+	  // handpub_[0] = n_.advertise<sensor_msgs::PointCloud2> ("transformed_handcloud", 1);
+	  is_pointingpub_ = n_.advertise<std_msgs::Bool> ("is_pointing", 1);
 	}
       count = 0;
       pos = 0;
@@ -270,7 +280,7 @@ public:
   void extractFeatures( pcl::PointCloud<pcl::PointXYZ> cloud2, arms &skel )
   {
     pcl::PointCloud<pcl::PointXYZ>  output, cloud;
-    // pcl::PointCloud<pcl::PointXYZ>::ptr output ( new pcl::PointCloud<pcl::PointXYZ> );
+   
      EIGEN_ALIGN16 Eigen::Vector3f eigen_values;
      EIGEN_ALIGN16 Eigen::Matrix3f eigen_vectors;
      Eigen::Matrix3f cov;
@@ -286,23 +296,23 @@ public:
       
      
      resample(cloud2, cloud, skel);
-  right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
-  right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
-  right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
+     right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
+     right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
+     right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
 
-   arm_length = right_arm.norm();
-   pcl::compute3DCentroid (cloud, centroid);
+     arm_length = right_arm.norm();
+     //pcl::compute3DCentroid (cloud, centroid);
    //pcl::computeCovarianceMatrixNormalized(cloud,centroid,cov);
    //pcl::eigen33 (cov, eigen_vectors, eigen_values);
 
    
-   z_axis[0] = right_arm[0];//eigen_vectors( 0, 2);
-   z_axis[1] = right_arm[1];//eigen_vectors( 1, 2);
-   z_axis[2] = right_arm[2];// eigen_vectors( 2, 2);
+     z_axis[0] = right_arm[0];//eigen_vectors( 0, 2);
+     z_axis[1] = right_arm[1];//eigen_vectors( 1, 2);
+     z_axis[2] = right_arm[2];// eigen_vectors( 2, 2);
    
-   yvector[0]  = 0;
-   yvector[1]  = 1;
-   yvector[2]  = 0; 
+     yvector[0]  = 0;
+     yvector[1]  = 1;
+     yvector[2]  = 0; 
     /*  y_axis[0] = eigen_vectors( 0, 0);
     y_axis[1] = eigen_vectors( 1, 0);
     y_axis[2] = eigen_vectors( 2, 0);
@@ -312,15 +322,15 @@ public:
     origin [ 2 ] = centroid[2];
     */
 
-   x_axis = yvector.cross(right_arm);
-   double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
-   if ( cos < 0 ) x_axis = - x_axis;
+     x_axis = yvector.cross(right_arm);
+     double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
+     if ( cos < 0 ) x_axis = - x_axis;
     
-   y_axis = z_axis.cross(x_axis);
+     y_axis = z_axis.cross(x_axis);
    
-   x_axis.normalize();
-   y_axis.normalize();
-   z_axis.normalize();
+     x_axis.normalize();
+     y_axis.normalize();
+     z_axis.normalize();
 
 
 
@@ -332,20 +342,20 @@ public:
    y_axis[1] = eigen_vectors( 1, 0);
    y_axis[2] = eigen_vectors( 2, 0);
    */
-   origin [ 0 ] = skel.right_hand.position.x;
-   origin [ 1 ] = skel.right_hand.position.y;
-   origin [ 2 ] = skel.right_hand.position.z;
+     origin [ 0 ] = skel.right_hand.position.x;
+     origin [ 1 ] = skel.right_hand.position.y;
+     origin [ 2 ] = skel.right_hand.position.z;
 
 
-   pcl::getTransformationFromTwoUnitVectorsAndOrigin(y_axis, z_axis, origin, transformation);
+     pcl::getTransformationFromTwoUnitVectorsAndOrigin(y_axis, z_axis, origin, transformation);
 
-   pcl::getTransformedPointCloud (cloud, transformation, output);
+     pcl::getTransformedPointCloud (cloud, transformation, output);
    
    // if ( output.is_dense)
    
-   pcl::toROSMsg( output, trans1 );
-   trans1.header = pcloudmsg.header;
-   handpub_[0].publish( trans1 );
+   // pcl::toROSMsg( output, trans1 );
+   //   trans1.header = pcloudmsg.header;
+   //handpub_[0].publish( trans1 );
    
    
 
@@ -371,8 +381,8 @@ public:
    */
    //cout << "R: " << r << endl;
     float r = 0.4 * arm_length;
-    r = r*r ;
-    float offset_r = r / 4.999;
+    
+    float offset_r = ( r * r ) / 4.999;
     origin[2] = min_pt.z;
     
     float offset_z = 0.7 * arm_length / 5.999;
@@ -400,24 +410,23 @@ public:
     pcl::ModelCoefficients tmp;
     tmp.values.push_back(0.0);
     tmp.values.push_back(0.0);
-    // tmp.values.push_back(0.4*arm_length);
     tmp.values.push_back(min_pt.z);
 
     tmp.values.push_back(0.0);
     tmp.values.push_back(0.0);
     tmp.values.push_back(1.0);
 
-    tmp.values.push_back(0.4 * arm_length);
+    tmp.values.push_back(r);
     
     coeffs.push_back(tmp);
 
-    /*   for (int i = 1; i < 7; i++ )
+    for (int i = 1; i < 7; i++ )
     { 
-      tmp.values[3]+= offset_z;
+      (tmp.values[3]) += offset_z;
       coeffs.push_back(tmp);      
-      }
+    }
     
-    */
+    
     /*  circles.clear();
     pcl::ModelCoefficients tmp;
     tmp.values.push_back(0.0);
@@ -433,6 +442,43 @@ public:
 	zzz+= offset_z;
 	}*/
     //  visual(output.makeShared(), coeffs);
+
+    float zzz = min_pt.z;
+    cylinder_cloud.points.clear();
+    for (int i = 0; i < 7; i++, zzz+= offset_z )
+      {
+	float radiuss = offset_r;
+	float orr = r / 5.0;
+	for ( int j = 0; j < 6; j++, radiuss += orr)
+	  {
+	    for (float angle(0.0); angle <= 360.0; angle += 5.0)
+	      {
+		pcl::PointXYZ basic_point;
+		basic_point.x =  radiuss * cosf (pcl::deg2rad(angle));
+		basic_point.y =  radiuss * sinf (pcl::deg2rad(angle));
+		basic_point.z = zzz;
+		cylinder_cloud.points.push_back(basic_point); 
+	      }
+	  }
+
+	orr = r / 25.0;
+	 for (float angle(0.0); angle <= 360.0; angle += 45.0)
+	      {
+		for (radiuss = orr; radiuss <= r; radiuss+= orr)
+		  {
+		pcl::PointXYZ basic_point;
+		basic_point.x =  radiuss * cosf (pcl::deg2rad(angle));
+		basic_point.y =  radiuss * sinf (pcl::deg2rad(angle));
+		basic_point.z = zzz;
+		cylinder_cloud.points.push_back(basic_point); 
+		  }
+	      }
+
+	
+      }
+    cylinder_cloud.width = cylinder_cloud.points.size();
+    cylinder_cloud.height = cylinder_cloud.points.size();
+
 
     if (output.is_dense)
       {
@@ -465,7 +511,7 @@ public:
       // tcout << histogram[i] << endl;
     }
      x.ft[240].index = -1;
-
+     averageFrame();
 
   }
 
@@ -474,7 +520,7 @@ public:
     std::vector<struct feature>::iterator it;
     it = frame.begin();
     it = frame.insert(it, x);
-    if (frame.size() > 4 ) frame.pop_back(); 
+    if (frame.size() > 9 ) frame.pop_back(); 
     for (int j = 0; j < 240; j++ )
       { 
 	float sum = 0.0;
@@ -588,7 +634,12 @@ public:
     extractFeatures(handcloud, a);
     kq = predict();
 
-     
+    std_msgs::Bool is_yubisashi;
+    if (kq == 1 ) is_yubisashi.data = true;
+    else is_yubisashi.data = false;
+
+    is_pointingpub_.publish(is_yubisashi);
+
      cv_bridge::CvImageConstPtr imgptr;
 
     imgptr = cv_bridge::toCvShare( imgmsg, enc::BGR8);
@@ -612,28 +663,28 @@ public:
     if ( kq == 1 )
       {
 	cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,255,0),2);
-	filename << "YUBISASHI [ Prob: " << prob_estimates[1] << " ]";
-	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0));
+	filename << "YUBISASHI [ Prob: " << prob_estimates[0] << " ]";
+	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 1);
 	pos++;
       }
     else
       {	
 	cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,0,255),2);
-	filename << "NOT YUBISASHI [ Prob: " << prob_estimates[1] << " ]" ;
+	filename << "NON-YUBISASHI [ Prob: " << prob_estimates[1] << " ]" ;
      
-	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,0,255));
+	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,0,255), 1);
       }
     
     filename.str("");
     filename << "Positive: " << pos << " / " <<  count;
-    cv::putText( img, filename.str(), cv::Point(10,50), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,255,0));
+    cv::putText( img, filename.str(), cv::Point(10,50), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,255,0), 2);
     filename.str("");
     filename << "FPS: " << fps;
-    cv::putText( img, filename.str(), cv::Point(10,80), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,255,0));
+    cv::putText( img, filename.str(), cv::Point(10,80), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,255,0), 2);
    
     //cv::imwrite(filename.str().c_str(), img);
     cv::imshow("Hand Detect", img);
-    cv::waitKey(20);
+    cv::waitKey(10);
     if ( save != 0 ) 
       {
  
@@ -700,6 +751,10 @@ public:
 	
 	 extractFeatures(handcloud, aa);
 	 kq = predict();
+	 
+
+
+	 
 	 count ++;
      
 	 imgin.getline( fname, 256);
@@ -726,21 +781,21 @@ public:
 	   {
 	     cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,255,0),2);
 	     filename << "YUBISASHI [ Prob: " << prob_estimates[1] << " ]";
-	     cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0));
+	     cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
 	     pos++;
 	   }
 	 else
 	   {	
 	     cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,0,255),2);
-	     filename << "NOT YUBISASHI [ Prob: " << prob_estimates[1] << " ]" ;     
-	     cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,0,255));
+	     filename << "NON-YUBISASHI [ Prob: " << prob_estimates[1] << " ]" ;     
+	     cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,0,255), 2);
 	     neg++;
 	   }
     
 	 std::cout << "Sum : " << count << " Positive : " << pos << " Negative : " << neg << std::endl;
 	 filename.str("");
 	 filename << "Positive: " << pos << " / " <<  count;
-	 cv::putText( img, filename.str(), cv::Point(10,50), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,255,0));
+	 cv::putText( img, filename.str(), cv::Point(10,50), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,255,0), 2);
 	 filename.str("");
    
 	 

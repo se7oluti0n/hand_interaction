@@ -14,9 +14,11 @@
 
 #include <ros/ros.h>
 #include <body_msgs/Skeletons.h>
+#include <mapping_msgs/PolygonalMap.h>
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/point_cloud_conversion.h>
+#include <std_msgs/Bool.h>
 #include <pcl_tools/pcl_utils.h>
 #include <nnn/nnn.hpp>
 
@@ -53,6 +55,11 @@ void PointConversion(Point1 pt1, Point2 &pt2){
    pt2.z=pt1.z;
 }
 
+geometry_msgs::Point32 PointToMsgPoint32(const geometry_msgs::Point p64){
+	geometry_msgs::Point32 p;
+	p.x=p64.x; p.y=p64.y; p.z=p64.z;
+	return p;
+}
 
 geometry_msgs::Point32 eigenToMsgPoint32(const Eigen::Vector4f &v){
 	geometry_msgs::Point32 p;
@@ -106,24 +113,29 @@ struct Pointing
 {
 private:
   ros::NodeHandle n_;
-  ros::Subscriber cloudsub_, skelsub_, imgsub_;
-  ros::Publisher detepub_[2];
+  ros::Subscriber cloudsub_, skelsub_, imgsub_, resultsub_;
+  ros::Publisher detepub_[2], laserpub_;
   sensor_msgs::PointCloud2 pcloudmsg;
   body_msgs::Skeletons skelmsg;
   sensor_msgs::ImageConstPtr imgmsg;
-
+  std_msgs::Bool kqmsg;
 
   int count ;
   int lastskelseq, lastcloudseq;
+  timeval t0;
+
+  mapping_msgs::PolygonalMap laserpmap;
 
 public:
   Pointing()
   {
     cloudsub_ = n_.subscribe("/camera/rgb/points",1, &Pointing::cloudcb, this);
     skelsub_ = n_.subscribe( "/skeletons", 1, &Pointing::skelcb, this );
-    // imgsub_ = n_.subscribe ( "/camera/rgb/image_color", 1, &Pointing::imgcb, this);
+    resultsub_ = n_.subscribe("is_pointing", 1, &Pointing::pointedcb, this);
+    imgsub_ = n_.subscribe ( "/camera/rgb/image_color", 1, &Pointing::imgcb, this);
     detepub_[0] = n_.advertise<sensor_msgs::PointCloud2> ("right_detected", 1);
-    detepub_[1] = n_.advertise<sensor_msgs::PointCloud2> ("left_detected", 1);
+    laserpub_ = n_.advertise<mapping_msgs::PolygonalMap> ("laser", 1);
+    // detepub_[1] = n_.advertise<sensor_msgs::PointCloud2> ("left_detected", 1);
     count = 0;
     lastskelseq = 0;
     lastcloudseq = 0;
@@ -132,6 +144,7 @@ public:
     // imgmsg.header.seq = 0;
 
     cout << "Init done!!!" << endl;
+    t0 = g_tick();
   }
 
   ~Pointing()
@@ -168,17 +181,86 @@ public:
     if ( skels.skeletons.size() == 0 )
       return;
     
+    double t1, fps;
+    t1 = g_tock(t0); t0 = g_tick();
+    fps = 1.0 / t1;
 
     cout << "Processing......." << endl;
     pcl::PointCloud<pcl::PointXYZ> fullcloud;
    
-
-    //
-    // cv_bridge::CvImageConstPtr imgptr;
-    //imgptr = cv_bridge::toCvShare ( imgmsg, enc::BGR8 );
+    laserpmap.polygons.clear();
+    laserpmap.header = cloud.header;
+    float constant = 1.90476e-03;
+    float centerX = 319.5;
+    float centerY = 239.5;
+    float radius = 0.1;
     
-    extractPointedArea( cloud, skels.skeletons[0], 1);
-    extractPointedArea( cloud, skels.skeletons[0], 0);
+    int u,v,r;
+    u = (int ) ( skels.skeletons[0].right_hand.position.x / constant / skels.skeletons[0].right_hand.position.z + centerX ); 
+    v = (int ) ( skels.skeletons[0].right_hand.position.y / constant / skels.skeletons[0].right_hand.position.z + centerY ); 
+    r = (int ) ( radius / constant / skels.skeletons[0].right_hand.position.z); 
+    
+    //
+    cv_bridge::CvImageConstPtr imgptr;
+    imgptr = cv_bridge::toCvShare ( imgmsg, enc::BGR8 );
+    cv::Mat img = imgptr->image.clone();
+
+
+    
+    cout << "Loading Image is Done!!! " << endl; 
+   
+    //extractPointedArea( cloud, skels.skeletons[0], 0);
+
+    std::stringstream filename;
+    filename.str("");
+    if ( kqmsg.data )
+      {
+	cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,255,0),2);
+	filename << "YUBISASHI";
+	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
+	
+	pcl::PointXYZ min_pt, max_pt, huvo;
+	if ( extractPointedArea( cloud, skels.skeletons[0], 1, min_pt, max_pt, huvo ) )
+	   {
+
+	     int maxx,maxy, minx, miny;
+
+	     minx = (int ) ( min_pt.x / constant / min_pt.z + centerX );
+	     miny = (int ) ( min_pt.y / constant / min_pt.z + centerY );
+	     maxx = (int ) ( max_pt.x / constant / max_pt.z + centerX );
+	     maxy = (int ) ( max_pt.y / constant / max_pt.z + centerY );
+	   
+	     cv::line( img, cv::Point( u, v ),  cv::Point(minx, miny),  cv::Scalar(0, 0, 255), 2 );
+	     cv::line( img, cv::Point( u, v ),  cv::Point(maxx, maxy),  cv::Scalar(0, 0, 255), 2 );
+	     cv::rectangle( img, cv::Point(minx, miny), cv::Point( maxx, maxy), cv::Scalar(255, 0, 0), 2);
+
+	   }
+
+	else
+	  {
+	    int vocucx, vocucy;
+	    
+	    vocucx = (int ) ( huvo.x / constant / (abs(huvo.z)) + centerX );
+	    vocucy = (int ) ( huvo.y / constant / (abs(huvo.z)) + centerY );
+	    
+	     cv::line( img, cv::Point( u, v ),  cv::Point(vocucx, vocucy),  cv::Scalar(0, 0, 255), 2 );
+	  }
+
+	cout << "Extracting pointed data is done" << endl;
+      }
+    else
+      {	
+	cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,0,255),2);
+	filename << "NON-YUBISASHI" ;
+     
+	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,0,255), 2);
+      }
+
+    filename.str("");
+    filename << "FPS: " << fps;
+    cv::putText( img, filename.str(), cv::Point(10,80), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,255,0), 2);
+    cv::imshow("Pointing Detect", img);
+    cv::waitKey(10);
     
   }
   /*  \brief : 
@@ -188,7 +270,7 @@ public:
    *
    *
    */
-  void extractPointedArea( sensor_msgs::PointCloud2  &cloudin, body_msgs::Skeleton skel, int is_right)
+  int extractPointedArea( sensor_msgs::PointCloud2  &cloudin, body_msgs::Skeleton skel, int is_right,  pcl::PointXYZ &min_pt, pcl::PointXYZ &max_pt, pcl::PointXYZ &vocuc  )
   {
 
     cout << "Extracting" << is_right << endl;
@@ -231,23 +313,59 @@ public:
       }
 
 
-    if (maxPointNumber == 0 ) 
+    int is_detected = 1;
+
+    Eigen::Vector4f  arm1, goc, huvo;
+    arm1(0) = skel.right_hand.position.x - skel.right_elbow.position.x;
+    arm1(1) = skel.right_hand.position.y - skel.right_elbow.position.y;
+    arm1(2) = skel.right_hand.position.z - skel.right_elbow.position.z;
+    
+    goc(0) = skel.right_hand.position.x;
+    goc(1) = skel.right_hand.position.y;
+    goc(2) = skel.right_hand.position.z;
+    
+    
+    arm1*= 20; 
+    huvo = goc + arm1;
+
+     geometry_msgs::Polygon p1;
+     p1.points.push_back(PointToMsgPoint32( skel.right_hand.position));
+    
+     
+
+     if (maxPointNumber == 0 ) 
       {
 	cout << "Can not detect" << endl;
-
+	is_detected = 0;
+	p1.points.push_back(eigenToMsgPoint32(huvo));
+	vocuc.x = huvo(0);
+	vocuc.y = huvo(1);
+	vocuc.z = huvo(2);
       }
     else
       {
 	getSubCloud(fullcloud, maxcloud, detected);
+	pcl::getMinMax3D( detected , min_pt, max_pt);
+	Eigen::Vector4f centroid;
+
+	pcl::compute3DCentroid (detected, centroid);
+	p1.points.push_back(eigenToMsgPoint32(centroid));
+
       }
 
     pcl::toROSMsg( detected, pointed_area );
     pointed_area.header = cloudin.header;
 
+    laserpmap.polygons.push_back(p1);
+    laserpmap.header=cloudin.header;
+    laserpub_.publish(laserpmap);
+
     if ( is_right )
       detepub_[0].publish( pointed_area );
     else
       detepub_[1].publish( pointed_area );
+
+    return is_detected;
 
   }
 
@@ -259,21 +377,26 @@ public:
   void cloudcb(const sensor_msgs::PointCloud2ConstPtr &fullcloud)
   {
     pcloudmsg = *fullcloud;
-    messageSync();
+    // messageSync();
   }
   
   void skelcb(const body_msgs::SkeletonsConstPtr &skels)
   {
     skelmsg = * skels;
-    messageSync();
+    // messageSync();
   }
 
   void imgcb( const sensor_msgs::ImageConstPtr & img)
   {
     imgmsg = img;
-    messageSync();
+    // messageSync();
   }
 
+  void pointedcb( const std_msgs::BoolConstPtr & kq)
+  {
+    kqmsg = *kq;
+    messageSync();
+  }
     
 
 };

@@ -13,3 +13,19 @@ Result 08/29/2011 2:05 PM  :
        N1 : True Negative 263 / 407 ~ 64.61 %
        N2 : True Negative 298 / 379 ~ 78.63 %
        N3 : True Negative 239 / 316 ~ 75.63 %
+
+Result 09/03/2011 2:05 PM  :
+       P1 : True Positive 301 / 319 ~ 94.34 %
+       P2 : True Positive 395 / 506 ~ 78.00 %
+       PP : True Positive 402 / 620 ~ 64.84 %
+       N1 : True Negative 293 / 407 ~ 71.99 %
+       N2 : True Negative 296 / 379 ~ 78.10 %
+       N3 : True Negative 274 / 316 ~ 86.71 %
+
+Result 09/03/2011 12:46 PM  :
+       P1 : True Positive 318 / 319 ~ 94.34 %
+       P2 : True Positive 420 / 506 ~ 84.58 %
+       PP : True Positive 440 / 620 ~ 70.96 %
+       N1 : True Negative 331 / 407 ~ 81.33 %
+       N2 : True Negative 327 / 379 ~ 86.27 %
+       N3 : True Negative 310 / 316 ~ 98.10 %

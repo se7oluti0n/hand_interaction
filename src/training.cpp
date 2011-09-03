@@ -24,9 +24,8 @@
 #include <iostream>
 #include <fstream>
 #include <cstdlib>
-
+#define  PI  3.14159266
 using namespace std;
-
 boost::mt19937 gen;
 struct arms
 {
@@ -121,8 +120,13 @@ void resample( pcl::PointCloud<pcl::PointXYZ> & cloudin, pcl::PointCloud<pcl::Po
  *
  *
  */
-void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eigen::Affine3f &transformation, float & arm_length)
+void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, std::vector<Eigen::Affine3f> &transformation, float & arm_length)
 {
+
+  transformation.clear();
+  
+  Eigen::Affine3f trans;
+ 
   EIGEN_ALIGN16 Eigen::Vector3f eigen_values;
   EIGEN_ALIGN16 Eigen::Matrix3f eigen_vectors;
   // Eigen::Matrix3f cov;
@@ -139,6 +143,10 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
   right_arm[1] = armin.right_hand.position.y - armin.right_elbow.position.y;
   right_arm[2] = armin.right_hand.position.z - armin.right_elbow.position.z;
   
+  origin [ 0 ] = armin.right_hand.position.x;
+  origin [ 1 ] = armin.right_hand.position.y;
+  origin [ 2 ] = armin.right_hand.position.z;
+
   arm_length = right_arm.norm();
   cout << "Arm length: " << arm_length << endl;
   /*
@@ -166,13 +174,40 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
    
 
    x_axis = yvector.cross(right_arm);
-   double cos = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
-   if ( cos < 0 ) x_axis = - x_axis;
+   double cosin = right_arm.dot(z_axis) / sqrt( right_arm.norm() * z_axis.norm() );
+   if ( cosin < 0 ) x_axis = - x_axis;
     
    y_axis = z_axis.cross(x_axis);
    x_axis.normalize();
    y_axis.normalize();
    z_axis.normalize();
+
+    pcl::getTransformationFromTwoUnitVectorsAndOrigin(y_axis, z_axis, origin, trans);
+    transformation.push_back(trans);
+   
+   Eigen::Vector3f xtmp, ytmp, tmp;
+   
+   for ( int i = 1; i <= 4; i++ )
+   {
+     tmp = y_axis * tan( PI * (float) i / 9.0 );
+     xtmp = x_axis + tmp ;
+     ytmp = z_axis.cross(xtmp);
+
+     xtmp.normalize();
+     ytmp.normalize();
+
+     pcl::getTransformationFromTwoUnitVectorsAndOrigin(ytmp, z_axis, origin, trans);
+     transformation.push_back(trans);
+
+     xtmp = x_axis - tmp ;
+     ytmp = z_axis.cross(xtmp);
+
+     xtmp.normalize();
+     ytmp.normalize();
+
+     pcl::getTransformationFromTwoUnitVectorsAndOrigin(ytmp, z_axis, origin, trans);
+     transformation.push_back(trans);
+   }
    
    
    /*cout << " tan: "<< tann ;
@@ -215,12 +250,10 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, Eig
     y_axis[2] = eigen_vectors( 2, 0);
 
    */
-    origin [ 0 ] = armin.right_hand.position.x;
-    origin [ 1 ] = armin.right_hand.position.y;
-    origin [ 2 ] = armin.right_hand.position.z;
+    
    
 
-   pcl::getTransformationFromTwoUnitVectorsAndOrigin(y_axis, z_axis, origin, transformation);
+  
 }
 int main(int argc, char ** argv)
 {
@@ -244,7 +277,7 @@ int main(int argc, char ** argv)
   while ( ! pcdin.eof() )
   {
     pcl::PointCloud<pcl::PointXYZ> cloud, cloud2, output;
-    Eigen::Affine3f transformation;
+    std::vector<Eigen::Affine3f> transformation;
     float arm_length;
  
     cout << "Start processing file " << count << endl;
@@ -265,101 +298,103 @@ int main(int argc, char ** argv)
    resample( cloud, cloud2, aa);
    getTransfromation( cloud2, aa, transformation, arm_length);
    cout << "Arm Length 2 : " << arm_length << endl;
-   pcl::getTransformedPointCloud (cloud2, transformation, output);
+   for ( int ll = 0; ll < transformation.size(); ll++)
+     {
+       pcl::getTransformedPointCloud (cloud2, transformation[ll], output);
 
-   pcl::PointXYZ min_pt, max_pt;
+       pcl::PointXYZ min_pt, max_pt;
 
-   pcl::getMinMax3D( output, min_pt, max_pt);
+       pcl::getMinMax3D( output, min_pt, max_pt);
 
 
-   Eigen::Vector3f origin;
-   origin[0] = aa.right_hand.position.x;
-   origin[1] = aa.right_hand.position.y;
+       Eigen::Vector3f origin;
+       origin[0] = aa.right_hand.position.x;
+       origin[1] = aa.right_hand.position.y;
    
    
-    //pcl::demeanPointCloud(cloud, centroid, output);
-    filename.str("");
+       //pcl::demeanPointCloud(cloud, centroid, output);
+       filename.str("");
     
-    filename << "converted/" << setfill('0') << setw(4) << count << ".pcd";
-    pcl::io::savePCDFileASCII( filename.str().c_str(), output);
-    cout << "Wrote : "  << filename.str() << endl;
-    cout << " Max : " << max_pt.z << " " << max_pt.y << " " << max_pt.x << endl;
-    cout << " Min : " << min_pt.z << " " << min_pt.y << " " << min_pt.x << endl;
+       filename << "converted/" << setfill('0') << setw(4) << count << ".pcd";
+       pcl::io::savePCDFileASCII( filename.str().c_str(), output);
+       cout << "Wrote : "  << filename.str() << endl;
+       cout << " Max : " << max_pt.z << " " << max_pt.y << " " << max_pt.x << endl;
+       cout << " Min : " << min_pt.z << " " << min_pt.y << " " << min_pt.x << endl;
     
     
     
-    /* float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
-    float r2 = min_pt.y * min_pt.y + min_pt.x * min_pt.x;
-    float r3 = max_pt.y * max_pt.y + min_pt.x * min_pt.x;
-    float r4 = min_pt.y * min_pt.y + max_pt.x * max_pt.x;
+       /* float r1 = max_pt.y * max_pt.y + max_pt.x * max_pt.x  ;
+	  float r2 = min_pt.y * min_pt.y + min_pt.x * min_pt.x;
+	  float r3 = max_pt.y * max_pt.y + min_pt.x * min_pt.x;
+	  float r4 = min_pt.y * min_pt.y + max_pt.x * max_pt.x;
 
     
     
-    float r = r1 > r2?r1:r2;
-    r = r > r3?r:r3;
-    r = r > r4?r:r4;
-    */
-    cout << "Max length : " << max_pt.z - min_pt.z << endl;
-    //cout << "R : " << r << endl;
-    float r = 0.4 * arm_length;
-    r = r*r;
-    cout << "R2 : " << r * r << endl;
+	  float r = r1 > r2?r1:r2;
+	  r = r > r3?r:r3;
+	  r = r > r4?r:r4;
+       */
+       cout << "Max length : " << max_pt.z - min_pt.z << endl;
+       //cout << "R : " << r << endl;
+       float r = 0.4 * arm_length;
+       r = r*r;
+       cout << "R2 : " << r * r << endl;
     
-    float offset_r = r /4.999;
-    origin[2] = min_pt.z;
+       float offset_r = r /4.999;
+       origin[2] = min_pt.z;
     
-    float offset_z = 0.7 * arm_length / 5.999;
-    const double PI = 3.14159266;
-    float offset_a = PI / 3.999;
+       float offset_z = 0.7 * arm_length / 5.999;
 
-    float histogram[240];
+       float offset_a = PI / 3.999;
+
+       float histogram[240];
    
-    for ( int i = 0; i < 240; i++ )
+       for ( int i = 0; i < 240; i++ )
       
-      {
-	histogram[i] = 0.0;
-	//	cout << histogram[i];
-      }
-     for ( int i = 0; i < output.points.size(); i++ )
-      {
-	int zz = floor (( output.points[i].z - origin[2] ) / offset_z);
-	zz = ( zz > 5?5:zz);
-	int pp = floor (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
-	pp = ( pp > 4?4:pp);
-	int aa = floor(( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
+	 {
+	   histogram[i] = 0.0;
+	   //	cout << histogram[i];
+	 }
+       for ( int i = 0; i < output.points.size(); i++ )
+	 {
+	   int zz = floor (( output.points[i].z - origin[2] ) / offset_z);
+	   zz = ( zz > 5?5:zz);
+	   int pp = floor (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
+	   pp = ( pp > 4?4:pp);
+	   int aa = floor(( PI + atan2(output.points[i].y, output.points[i].x)) / offset_a );
 
-        int index = zz * 40 + pp * 8 + aa % 8;
-	if ( index < 0 || index > 239 ) 
-	  {
-	    cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;
-	    exit(1);
-	  }
-	histogram[index] += 1.0;
-      }
-     cout << "Complete histogram" << endl;
-     filename.str("");
-     filename << "histogram/" << setfill('0') << setw(4) << count << ".data";
+	   int index = zz * 40 + pp * 8 + aa % 8;
+	   if ( index < 0 || index > 239 ) 
+	     {
+	       cout << "Out of range!!" << " " << zz << " " << pp << " " << aa << endl;
+	       exit(1);
+	     }
+	   histogram[index] += 1.0;
+	 }
+       cout << "Complete histogram" << endl;
+       filename.str("");
+       filename << "histogram/" << setfill('0') << setw(4) << count << ".data";
 
     
-     for ( int i = 0; i < 240; i++ )
-    {
-      histogram[i] /= (float) output.points.size();
+       for ( int i = 0; i < 240; i++ )
+	 {
+	   histogram[i] /= (float) output.points.size();
      
      
-      // tcout << histogram[i] << endl;
-    }
+	   // tcout << histogram[i] << endl;
+	 }
     
-     cout << "Complete Normalized" << endl;
+       cout << "Complete Normalized" << endl;
      
-     ofstream hisout(filename.str().c_str());
-     for ( int i = 0; i < 240; i++ )
-       {
-	 hisout << i << " " << histogram[i] << endl;
+       ofstream hisout(filename.str().c_str());
+       for ( int i = 0; i < 240; i++ )
+	 {
+	   hisout << i << " " << histogram[i] << endl;
 	 	 
-       }
+	 }
      
-     hisout.close();
-     cout << "Complete write to Histogram folder" << endl;
+       hisout.close();
+       cout << "Complete write to Histogram folder" << endl;
     
 
        out << classs;
@@ -372,12 +407,13 @@ int main(int argc, char ** argv)
        out << endl;
     
 
-     cout << "Complete write to training file" << endl;
-     // getTransFromUnitVectorsZY (z_axis, y_axis, transformation);
+        cout << "Complete write to training file" << endl;
+       // getTransFromUnitVectorsZY (z_axis, y_axis, transformation);
    
    
-    count++;
-     cout << "Complete write to training file" << endl;
+       count++;
+       //cout << "Complete write to training file" << endl;
+     }
     }
 
     out.close();
