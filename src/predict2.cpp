@@ -10,6 +10,7 @@
 #include <body_msgs/Hands.h>
 #include <sensor_msgs/point_cloud_conversion.h>
 #include <sensor_msgs/image_encodings.h>
+#include <geometry_msgs/Point.h>
 #include <std_msgs/Bool.h>
 #include <pcl_tools/pcl_utils.h>
 //#include <pcl_tools/segfast.hpp>
@@ -53,7 +54,21 @@ vector<pcl::ModelCoefficients> coeffs;
 boost::mt19937 gen;
 pcl::visualization::CloudViewer viewer("Cloud Viewer");
 pcl::PointCloud<pcl::PointXYZ> cylinder_cloud;
+pcl::PointXYZ ff;
 //boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("Features Visual Viewer"));
+
+template <typename Point1, typename Point2>
+void PointConversion(Point1 pt1, Point2 &pt2){
+   pt2.x=pt1.x;
+   pt2.y=pt1.y;
+   pt2.z=pt1.z;
+}
+
+pcl::PointXYZ eigenToPclPoint(const Eigen::Vector4f &v){
+   pcl::PointXYZ p;
+   p.x=v(0); p.y=v(1); p.z=v(2);
+   return p;
+}
 
 void visual (pcl::visualization::PCLVisualizer& viewera)
   {
@@ -75,6 +90,10 @@ void visual (pcl::visualization::PCLVisualizer& viewera)
     viewera.addPointCloud<pcl::PointXYZ> (cylinder_cloud.makeShared(), single_color,  "cylinder");
     viewera.setPointCloudRenderingProperties( pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1.0, "cylinder");
     viewera.setPointCloudRenderingProperties( pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1.0, 0, "cylinder");
+
+    viewera.removeShape("sphere");
+    viewera.addSphere (ff, 0.01, 0.5, 0.5, 0.0, "sphere");
+    viewera.setShapeRenderingProperties(  pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1.0, 1.0, "sphere");
     
     //id = "circle";
     
@@ -96,10 +115,12 @@ struct HandSaver
  private:
   ros::NodeHandle n_;
   ros::Subscriber cloudsub_, skelsub_, imgsub_;
-  ros::Publisher is_pointingpub_;
+  ros::Publisher is_pointingpub_, fingerpub_;
   sensor_msgs::PointCloud2 pcloudmsg;
   body_msgs::Skeletons skelmsg;
   sensor_msgs::ImageConstPtr imgmsg;
+
+  geometry_msgs::Point finger_point;
   
   std::vector<struct feature> frame;
   struct feature x;
@@ -132,6 +153,7 @@ public:
 	  imgsub_  = n_.subscribe("/camera/rgb/image_color", 1, &HandSaver::imgcb, this);
 	  // handpub_[0] = n_.advertise<sensor_msgs::PointCloud2> ("transformed_handcloud", 1);
 	  is_pointingpub_ = n_.advertise<std_msgs::Bool> ("is_pointing", 1);
+	  fingerpub_ = n_.advertise<geometry_msgs::Point> ("fingertip", 1);
 	}
       count = 0;
       pos = 0;
@@ -279,7 +301,7 @@ public:
 
   void extractFeatures( pcl::PointCloud<pcl::PointXYZ> cloud2, arms &skel )
   {
-    pcl::PointCloud<pcl::PointXYZ>  output, cloud;
+    pcl::PointCloud<pcl::PointXYZ>  output, cloud, fingertip;
    
      EIGEN_ALIGN16 Eigen::Vector3f eigen_values;
      EIGEN_ALIGN16 Eigen::Matrix3f eigen_vectors;
@@ -447,9 +469,10 @@ public:
     cylinder_cloud.points.clear();
     for (int i = 0; i < 7; i++, zzz+= offset_z )
       {
-	float radiuss = offset_r;
+
 	float orr = r / 5.0;
-	for ( int j = 0; j < 6; j++, radiuss += orr)
+	float radiuss = orr;
+	for ( int j = 0; j < 5; j++, radiuss += orr)
 	  {
 	    for (float angle(0.0); angle <= 360.0; angle += 5.0)
 	      {
@@ -464,7 +487,7 @@ public:
 	orr = r / 25.0;
 	 for (float angle(0.0); angle <= 360.0; angle += 45.0)
 	      {
-		for (radiuss = orr; radiuss <= r; radiuss+= orr)
+		for (radiuss = 0; radiuss <= r; radiuss+= orr)
 		  {
 		pcl::PointXYZ basic_point;
 		basic_point.x =  radiuss * cosf (pcl::deg2rad(angle));
@@ -487,9 +510,14 @@ public:
       }
     /*************************************************/
 
-
+    float fingertip_z = max_pt.z - (max_pt.z - min_pt.z) / 6;
+    
      for ( int i = 0; i < output.points.size(); i++ )
       {
+	if ( output.points[i].z > fingertip_z ) 
+	  fingertip.points.push_back(output.points[i]);
+	
+
 	int zz = floor (( output.points[i].z - origin[2] ) / offset_z);
 	zz = ( zz > 5? 5 : zz );
 	int pp = (int) (( output.points[i].y * output.points[i].y  + output.points[i].x * output.points[i].x ) / offset_r );
@@ -502,6 +530,24 @@ public:
 	histogram[ index  ] += 1.0;
 
       }
+
+     Eigen::Vector4f fingertip_centroid;
+    
+    
+
+     pcl::PointXYZ local_centroid, global_centroid;
+
+     pcl::compute3DCentroid( fingertip, fingertip_centroid);
+     local_centroid = eigenToPclPoint(fingertip_centroid);
+     ff = local_centroid;
+     Eigen::Affine3f inverse_transformation;
+
+     pcl::getInverse( transformation, inverse_transformation);
+     global_centroid = pcl::transformXYZ ( inverse_transformation, local_centroid);
+     
+     PointConversion(global_centroid, finger_point);
+     //fingerpub_.publish(
+     
      
      for ( int i = 0; i < 240; i++ )
     {
@@ -639,6 +685,7 @@ public:
     else is_yubisashi.data = false;
 
     is_pointingpub_.publish(is_yubisashi);
+    fingerpub_.publish(finger_point);
 
      cv_bridge::CvImageConstPtr imgptr;
 
@@ -676,7 +723,7 @@ public:
       }
     
     filename.str("");
-    filename << "Positive: " << pos << " / " <<  count;
+    filename << "Frame: " << count;
     cv::putText( img, filename.str(), cv::Point(10,50), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,255,0), 2);
     filename.str("");
     filename << "FPS: " << fps;

@@ -18,6 +18,7 @@
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/point_cloud_conversion.h>
+#include <geometry_msgs/Point.h>
 #include <std_msgs/Bool.h>
 #include <pcl_tools/pcl_utils.h>
 #include <nnn/nnn.hpp>
@@ -113,11 +114,12 @@ struct Pointing
 {
 private:
   ros::NodeHandle n_;
-  ros::Subscriber cloudsub_, skelsub_, imgsub_, resultsub_;
+  ros::Subscriber cloudsub_, skelsub_, imgsub_, resultsub_, fingertipsub_;
   ros::Publisher detepub_[2], laserpub_;
   sensor_msgs::PointCloud2 pcloudmsg;
   body_msgs::Skeletons skelmsg;
   sensor_msgs::ImageConstPtr imgmsg;
+  geometry_msgs::Point pmsg;
   std_msgs::Bool kqmsg;
 
   int count ;
@@ -133,6 +135,8 @@ public:
     skelsub_ = n_.subscribe( "/skeletons", 1, &Pointing::skelcb, this );
     resultsub_ = n_.subscribe("is_pointing", 1, &Pointing::pointedcb, this);
     imgsub_ = n_.subscribe ( "/camera/rgb/image_color", 1, &Pointing::imgcb, this);
+    fingertipsub_ = n_.subscribe("fingertip", 1, &Pointing::fingertipcb, this);
+
     detepub_[0] = n_.advertise<sensor_msgs::PointCloud2> ("right_detected", 1);
     laserpub_ = n_.advertise<mapping_msgs::PolygonalMap> ("laser", 1);
     // detepub_[1] = n_.advertise<sensor_msgs::PointCloud2> ("left_detected", 1);
@@ -185,6 +189,8 @@ public:
     t1 = g_tock(t0); t0 = g_tick();
     fps = 1.0 / t1;
 
+    count++;
+
     cout << "Processing......." << endl;
     pcl::PointCloud<pcl::PointXYZ> fullcloud;
    
@@ -200,6 +206,8 @@ public:
     v = (int ) ( skels.skeletons[0].right_hand.position.y / constant / skels.skeletons[0].right_hand.position.z + centerY ); 
     r = (int ) ( radius / constant / skels.skeletons[0].right_hand.position.z); 
     
+    
+
     //
     cv_bridge::CvImageConstPtr imgptr;
     imgptr = cv_bridge::toCvShare ( imgmsg, enc::BGR8 );
@@ -215,6 +223,10 @@ public:
     filename.str("");
     if ( kqmsg.data )
       {
+	int fingertip_x, fingertip_y;
+	fingertip_x = (int ) ( pmsg.x / constant / pmsg.z + centerX );
+	fingertip_y = (int ) ( pmsg.y / constant / pmsg.z + centerY );
+
 	cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,255,0),2);
 	filename << "YUBISASHI";
 	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
@@ -230,8 +242,8 @@ public:
 	     maxx = (int ) ( max_pt.x / constant / max_pt.z + centerX );
 	     maxy = (int ) ( max_pt.y / constant / max_pt.z + centerY );
 	   
-	     cv::line( img, cv::Point( u, v ),  cv::Point(minx, miny),  cv::Scalar(0, 0, 255), 2 );
-	     cv::line( img, cv::Point( u, v ),  cv::Point(maxx, maxy),  cv::Scalar(0, 0, 255), 2 );
+	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(minx, miny),  cv::Scalar(0, 0, 255), 2 );
+	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(maxx, maxy),  cv::Scalar(0, 0, 255), 2 );
 	     cv::rectangle( img, cv::Point(minx, miny), cv::Point( maxx, maxy), cv::Scalar(255, 0, 0), 2);
 
 	   }
@@ -243,7 +255,7 @@ public:
 	    vocucx = (int ) ( huvo.x / constant / (abs(huvo.z)) + centerX );
 	    vocucy = (int ) ( huvo.y / constant / (abs(huvo.z)) + centerY );
 	    
-	     cv::line( img, cv::Point( u, v ),  cv::Point(vocucx, vocucy),  cv::Scalar(0, 0, 255), 2 );
+	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(vocucx, vocucy),  cv::Scalar(0, 0, 255), 2 );
 	  }
 
 	cout << "Extracting pointed data is done" << endl;
@@ -256,6 +268,9 @@ public:
 	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,0,255), 2);
       }
 
+    filename.str("");
+    filename << "Frame: " << count;
+    cv::putText( img, filename.str(), cv::Point(10,50), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,255,0), 2);
     filename.str("");
     filename << "FPS: " << fps;
     cv::putText( img, filename.str(), cv::Point(10,80), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,255,0), 2);
@@ -278,6 +293,7 @@ public:
     int maxPointNumber = 0;
     //Eigen::Vector4f center;
     pcl::PointXYZ center, tmp;
+    float density_threshold, search_radius = 0.1;
     float distance = 0;
 
     pcl::PointCloud<pcl::PointXYZ> detected, fullcloud;
@@ -286,7 +302,7 @@ public:
 
 
     if ( is_right )  
-      center = pointToPclPoint(skel.right_hand.position);   
+      PointConversion(pmsg, center);   
     else
       center = pointToPclPoint(skel.left_hand.position);   
       
@@ -295,24 +311,32 @@ public:
 	tmp = center;
 
 	if ( is_right )
-	  center = addVector(tmp, skel.right_elbow.position, skel.right_hand.position, 0.7);
+	  center = addVector(tmp, skel.right_elbow.position, skel.right_hand.position, 0.5);
 	else
-	  center = addVector(tmp, skel.left_elbow.position, skel.left_hand.position, 0.7);
-	  
-	distance += sqrt( (center.x - tmp.x) * (center.x - tmp.x) +
-			  (center.y - tmp.y) * (center.y - tmp.y) +
-			  (center.z - tmp.z) * (center.z - tmp.z));
+	  center = addVector(tmp, skel.left_elbow.position, skel.left_hand.position, 0.5);
 	
-	NNN(fullcloud, center, inds, .1);
+	if (center.z < -0.1 ) break;
+	
+	distance = sqrt( (center.x - pmsg.x) * (center.x - pmsg.x) +
+			  (center.y - pmsg.y) * (center.y - pmsg.y) +
+			  (center.z - pmsg.z) * (center.z - pmsg.z));
+
+	
+	
+	NNN(fullcloud, center, inds, search_radius);
 
 	if ( inds.size() > maxPointNumber )
 	  {
 	    maxcloud = inds;
 	    maxPointNumber = inds.size();
+	    if (maxPointNumber > 200 ) break;
 	  }
+
+	
       }
 
 
+    cout << "max point number : " << maxPointNumber << endl;
     int is_detected = 1;
 
     Eigen::Vector4f  arm1, goc, huvo;
@@ -320,16 +344,16 @@ public:
     arm1(1) = skel.right_hand.position.y - skel.right_elbow.position.y;
     arm1(2) = skel.right_hand.position.z - skel.right_elbow.position.z;
     
-    goc(0) = skel.right_hand.position.x;
-    goc(1) = skel.right_hand.position.y;
-    goc(2) = skel.right_hand.position.z;
+    goc(0) = pmsg.x;
+    goc(1) = pmsg.y;
+    goc(2) = pmsg.z;
     
     
     arm1*= 20; 
     huvo = goc + arm1;
 
      geometry_msgs::Polygon p1;
-     p1.points.push_back(PointToMsgPoint32( skel.right_hand.position));
+     p1.points.push_back(PointToMsgPoint32( pmsg));
     
      
 
@@ -396,6 +420,12 @@ public:
   {
     kqmsg = *kq;
     messageSync();
+  }
+
+  void fingertipcb( const geometry_msgs::PointConstPtr &fgtip)
+  {
+    pmsg = *fgtip;
+
   }
     
 
