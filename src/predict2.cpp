@@ -13,6 +13,7 @@
 #include <geometry_msgs/Point.h>
 #include <std_msgs/Bool.h>
 #include <pcl_tools/pcl_utils.h>
+#include <hand_interaction/Pointing.h>
 //#include <pcl_tools/segfast.hpp>
 
 #include <pcl/common/impl/angles.hpp>
@@ -115,10 +116,10 @@ struct HandSaver
  private:
   ros::NodeHandle n_;
   ros::Subscriber cloudsub_, skelsub_, imgsub_;
-  ros::Publisher is_pointingpub_, fingerpub_;
+  ros::Publisher pointingpub_, fingerpub_;
   sensor_msgs::PointCloud2 pcloudmsg;
   body_msgs::Skeletons skelmsg;
-  sensor_msgs::ImageConstPtr imgmsg;
+  sensor_msgs::Image imgmsg;
 
   geometry_msgs::Point finger_point;
   
@@ -133,7 +134,7 @@ struct HandSaver
   std::string name, foldername;
   int count, pos, neg ;
   int save;
-  int lastskelseq, lastcloudseq;
+  int lastskelseq, lastcloudseq, lastimgseq;
   timeval t0;
 
   int svm_type, nr_class;
@@ -144,7 +145,7 @@ struct HandSaver
   
 public:
   
-  HandSaver(std::string name_, int saveChoice, string folder, int onl = 1):foldername(folder), name(name_), predict_probability(1), max_nr_attr(64), save(saveChoice), online(onl)
+  HandSaver(std::string name_, int saveChoice, string folder, int onl = 1, int prob =  1):foldername(folder), name(name_), predict_probability(prob), max_nr_attr(64), save(saveChoice), online(onl)
     {
       if (online)
 	{
@@ -152,8 +153,8 @@ public:
 	  skelsub_ = n_.subscribe("/skeletons", 1, &HandSaver::skelcb, this);
 	  imgsub_  = n_.subscribe("/camera/rgb/image_color", 1, &HandSaver::imgcb, this);
 	  // handpub_[0] = n_.advertise<sensor_msgs::PointCloud2> ("transformed_handcloud", 1);
-	  is_pointingpub_ = n_.advertise<std_msgs::Bool> ("is_pointing", 1);
-	  fingerpub_ = n_.advertise<geometry_msgs::Point> ("fingertip", 1);
+	  pointingpub_ = n_.advertise<hand_interaction::Pointing> ("pointing_info", 1);
+	  //fingerpub_ = n_.advertise<geometry_msgs::Point> ("fingertip", 1);
 	}
       count = 0;
       pos = 0;
@@ -161,8 +162,10 @@ public:
       t0 = g_tick();
       lastskelseq = 0;
       lastcloudseq = 0;
+      lastimgseq = 0;
       skelmsg.header.seq = 0;
       pcloudmsg.header.seq = 0;
+      imgmsg.header.seq = 0;
       string cmd;
       cmd = "mkdir " + foldername;
       system(cmd.c_str());
@@ -246,16 +249,19 @@ public:
   // \brief This function tries to sync the skeleton and point cloud messages 
   void messageSync()
   {
-    if ( skelmsg.header.seq == lastskelseq || pcloudmsg.header.seq == lastcloudseq )
+    if ( skelmsg.header.seq == lastskelseq || pcloudmsg.header.seq == lastcloudseq || imgmsg.header.seq == lastimgseq)
       return;
 
     double tdiff = (skelmsg.header.stamp - pcloudmsg.header.stamp).toSec();
+    double tdiff2 =  (imgmsg.header.stamp - pcloudmsg.header.stamp).toSec();
+    double tdiff3 =  (imgmsg.header.stamp - skelmsg.header.stamp).toSec();
     
-    //if (fabs(tdiff) < .15){
+    if (fabs(tdiff) < .15 && fabs(tdiff2) < .15 && fabs(tdiff3) < .15 ){
       lastskelseq = skelmsg.header.seq;
       lastcloudseq = pcloudmsg.header.seq;
+      lastimgseq = imgmsg.header.seq;
       ProcessData(skelmsg, pcloudmsg);
-      //}
+     }
 
 
   }
@@ -299,7 +305,7 @@ public:
   }
 
 
-  void extractFeatures( pcl::PointCloud<pcl::PointXYZ> cloud2, arms &skel )
+  void extractFeatures( pcl::PointCloud<pcl::PointXYZ> cloud2, arms &skel, hand_interaction::Pointing &pointing )
   {
     pcl::PointCloud<pcl::PointXYZ>  output, cloud, fingertip;
    
@@ -548,6 +554,7 @@ public:
      PointConversion(global_centroid, finger_point);
      //fingerpub_.publish(
      
+     pointing.fingertip = finger_point;
      
      for ( int i = 0; i < 240; i++ )
     {
@@ -676,20 +683,27 @@ public:
     pcl::PointCloud<pcl::PointXYZ> handcloud;
     pcl::fromROSMsg( cloud, handcloud);
     arms a;
+  
+    hand_interaction::Pointing pointing;
+
     extractArm( skels.skeletons[0], a);
-    extractFeatures(handcloud, a);
+    extractFeatures(handcloud, a, pointing);
     kq = predict();
 
-    std_msgs::Bool is_yubisashi;
-    if (kq == 1 ) is_yubisashi.data = true;
-    else is_yubisashi.data = false;
+  
+    //std_msgs::Bool is_yubisashi;
+    if (kq == 1 ) pointing.is_pointing = true;
+    else pointing.is_pointing = false;
 
-    is_pointingpub_.publish(is_yubisashi);
-    fingerpub_.publish(finger_point);
 
-     cv_bridge::CvImageConstPtr imgptr;
+    pointing.header = cloud.header;
+    pointingpub_.publish(pointing);
+    //fingerpub_.publish(finger_point);
 
-    imgptr = cv_bridge::toCvShare( imgmsg, enc::BGR8);
+     cv_bridge::CvImagePtr imgptr;
+
+     // sensor_msgs::ImagePtr imgmsgptr(&imgmsg);
+     imgptr = cv_bridge::toCvCopy( imgmsg, enc::BGR8);
     cv::Mat img = imgptr->image.clone();
     // imageHandDetect(img, );
 
@@ -710,14 +724,22 @@ public:
     if ( kq == 1 )
       {
 	cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,255,0),2);
-	filename << "YUBISASHI [ Prob: " << prob_estimates[0] << " ]";
+	if (predict_probability)
+	  
+	  filename << "YUBISASHI [ Prob: " << prob_estimates[0] << " ]";
+	else
+	  filename << "YUBISASHI"; 
 	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 1);
 	pos++;
       }
     else
       {	
 	cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,0,255),2);
-	filename << "NON-YUBISASHI [ Prob: " << prob_estimates[1] << " ]" ;
+	if (predict_probability)
+	  
+	  filename << "NON-YUBISASHI [ Prob: " << prob_estimates[1] << " ]" ;
+	else
+	  filename << "NON-YUBISASHI";
      
 	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,0,255), 1);
       }
@@ -796,7 +818,8 @@ public:
 	arms aa;
 	readJointFile(fname, aa);
 	
-	 extractFeatures(handcloud, aa);
+	hand_interaction::Pointing pointing;
+	extractFeatures(handcloud, aa, pointing);
 	 kq = predict();
 	 
 
@@ -827,14 +850,23 @@ public:
 	 if ( kq == 1 )
 	   {
 	     cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,255,0),2);
-	     filename << "YUBISASHI [ Prob: " << prob_estimates[1] << " ]";
+	     if (predict_probability)
+	       
+	       filename << "YUBISASHI [ Prob: " << prob_estimates[1] << " ]";
+
+	     else
+	       
+	       filename << "YUBISASHI" ; 
 	     cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
 	     pos++;
 	   }
 	 else
 	   {	
 	     cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,0,255),2);
-	     filename << "NON-YUBISASHI [ Prob: " << prob_estimates[1] << " ]" ;     
+	     if (predict_probability ) 
+	       filename << "NON-YUBISASHI [ Prob: " << prob_estimates[1] << " ]" ;     
+	     else
+	       filename << "NON-YUBISASHI" ; 
 	     cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,0,255), 2);
 	     neg++;
 	   }
@@ -879,13 +911,14 @@ public:
     */
 
     pcloudmsg = *scan;
+    messageSync();
     
   }
   
   void imgcb ( const sensor_msgs::ImageConstPtr & img)
   {
-    imgmsg = img;
-    // messageSync();
+    imgmsg = *img;
+    messageSync();
 
   }
   void skelcb ( const body_msgs::SkeletonsConstPtr &skels)
@@ -904,11 +937,14 @@ int main( int argc, char ** argv )
   ros::init( argc, argv, "predict");
   ros::NodeHandle n;
   std::string name, folder;
-  int save, online = 1;
+  int save = 0, online = 1, prob;
   std::cout << "Please input the Hand MODEL filename: ";
   std::cin >> name;
-  std::cout << "Would you like to save data? ( 0 for No, 1 for false positive, 2 for false nagative ): ";
-  std::cin >> save;
+  std::cout << "Using probability predict? : ";
+  std::cin >> prob;
+  
+  // std::cout << "Would you like to save data? ( 0 for No, 1 for false positive, 2 for false nagative ): ";
+  //std::cin >> save;
   if ( save != 0 ) 
     {
       std::cout << "Input folder name to save: ";
@@ -916,7 +952,7 @@ int main( int argc, char ** argv )
     }
   std::cout << "Processing ONLINE? : ";
   std::cin >> online;
-  HandSaver  saver(name, save, folder, online);
+  HandSaver  saver(name, save, folder, online, prob);
   if ( online ) ros::spin();
 
   return 0;

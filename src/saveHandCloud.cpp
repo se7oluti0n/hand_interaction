@@ -36,11 +36,11 @@ struct HandSaver
   ros::Subscriber cloudsub_, skelsub_, imgsub_;
   sensor_msgs::PointCloud2 pcloudmsg;
   body_msgs::Skeletons skelmsg;
-  sensor_msgs::ImageConstPtr imgmsg;
+  sensor_msgs::Image imgmsg;
   //stringstream filename;
   std::string name;
   int count ;
-  int lastskelseq, lastcloudseq;
+  int lastskelseq, lastcloudseq, lastimgseq;
   
 public:
   
@@ -52,8 +52,10 @@ public:
       count = 0;
       lastskelseq = 0;
       lastcloudseq = 0;
+      lastimgseq = 0;
       skelmsg.header.seq = 0;
       pcloudmsg.header.seq = 0;
+      imgmsg.header.seq = 0;
       string cmd;
       cmd = "mkdir " + name;
       system(cmd.c_str());
@@ -64,16 +66,19 @@ public:
   // \brief This function tries to sync the skeleton and point cloud messages 
   void messageSync()
   {
-    if ( skelmsg.header.seq == lastskelseq || pcloudmsg.header.seq == lastcloudseq )
+    if ( skelmsg.header.seq == lastskelseq || pcloudmsg.header.seq == lastcloudseq || imgmsg.header.seq == lastimgseq)
       return;
 
     double tdiff = (skelmsg.header.stamp - pcloudmsg.header.stamp).toSec();
+    double tdiff2 = (skelmsg.header.stamp - imgmsg.header.stamp).toSec();
+    double tdiff3 = (imgmsg.header.stamp - pcloudmsg.header.stamp).toSec();
     
-    //if (fabs(tdiff) < .15){
+    if (fabs(tdiff) < .15 && fabs(tdiff2) < .15 && fabs(tdiff3) < .15){
       lastskelseq = skelmsg.header.seq;
       lastcloudseq = pcloudmsg.header.seq;
+      lastimgseq = imgmsg.header.seq;
       ProcessData(skelmsg, pcloudmsg);
-      //}
+    }
 
 
   }
@@ -133,9 +138,9 @@ public:
 
     filename.str("");
     filename << name << "/" << setfill('0') << setw(4) << count << ".jpg";
-    cv_bridge::CvImageConstPtr imgptr;
+    cv_bridge::CvImagePtr imgptr;
 
-    imgptr = cv_bridge::toCvShare( imgmsg, enc::BGR8);
+    imgptr = cv_bridge::toCvCopy( imgmsg, enc::BGR8);
     cv::imwrite(filename.str().c_str(), imgptr->image);
     count++;
     std::cout << "Writed " << count << std::endl; 
@@ -149,7 +154,7 @@ public:
   /**************************************************************************/ 
   void imgcb( const sensor_msgs::ImageConstPtr & img)
   {
-    imgmsg = img;
+    imgmsg = *img;
     messageSync();
 
   }
@@ -169,7 +174,6 @@ public:
   void skelcb ( const body_msgs::SkeletonsConstPtr &skels)
   {
     skelmsg = *skels;
-
     messageSync();
 
   }

@@ -15,6 +15,7 @@
 #include <ros/ros.h>
 #include <body_msgs/Skeletons.h>
 #include <mapping_msgs/PolygonalMap.h>
+#include <hand_interaction/Pointing.h>
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/point_cloud_conversion.h>
@@ -114,16 +115,17 @@ struct Pointing
 {
 private:
   ros::NodeHandle n_;
-  ros::Subscriber cloudsub_, skelsub_, imgsub_, resultsub_, fingertipsub_;
+  ros::Subscriber cloudsub_, skelsub_, imgsub_, pointingsub_;
   ros::Publisher detepub_[2], laserpub_;
   sensor_msgs::PointCloud2 pcloudmsg;
   body_msgs::Skeletons skelmsg;
-  sensor_msgs::ImageConstPtr imgmsg;
-  geometry_msgs::Point pmsg;
-  std_msgs::Bool kqmsg;
+  sensor_msgs::Image imgmsg;
+  //geometry_msgs::Point pmsg;
+  hand_interaction::Pointing pointingmsg;
+  // std_msgs::Bool kqmsg;
 
   int count ;
-  int lastskelseq, lastcloudseq;
+  int lastskelseq, lastcloudseq, lastimgseq, lastpointingseq;
   timeval t0;
 
   mapping_msgs::PolygonalMap laserpmap;
@@ -133,9 +135,9 @@ public:
   {
     cloudsub_ = n_.subscribe("/camera/rgb/points",1, &Pointing::cloudcb, this);
     skelsub_ = n_.subscribe( "/skeletons", 1, &Pointing::skelcb, this );
-    resultsub_ = n_.subscribe("is_pointing", 1, &Pointing::pointedcb, this);
+    //resultsub_ = n_.subscribe("is_pointing", 1, &Pointing::pointedcb, this);
     imgsub_ = n_.subscribe ( "/camera/rgb/image_color", 1, &Pointing::imgcb, this);
-    fingertipsub_ = n_.subscribe("fingertip", 1, &Pointing::fingertipcb, this);
+    pointingsub_= n_.subscribe("pointing_info", 1, &Pointing::pointingcb, this);
 
     detepub_[0] = n_.advertise<sensor_msgs::PointCloud2> ("right_detected", 1);
     laserpub_ = n_.advertise<mapping_msgs::PolygonalMap> ("laser", 1);
@@ -143,9 +145,12 @@ public:
     count = 0;
     lastskelseq = 0;
     lastcloudseq = 0;
+    lastimgseq = 0;
+    lastpointingseq = 0;
     skelmsg.header.seq = 0;
     pcloudmsg.header.seq = 0;
-    // imgmsg.header.seq = 0;
+    imgmsg.header.seq = 0;
+    pointingmsg.header.seq = 0;
 
     cout << "Init done!!!" << endl;
     t0 = g_tick();
@@ -159,16 +164,23 @@ public:
   void messageSync()
   {
 
-     if ( skelmsg.header.seq == lastskelseq || pcloudmsg.header.seq == lastcloudseq )
+    if ( skelmsg.header.seq == lastskelseq || pcloudmsg.header.seq == lastcloudseq 
+	 	  || imgmsg.header.seq == lastimgseq || pointingmsg.header.seq == lastpointingseq )
       return;
 
-    double tdiff = (skelmsg.header.stamp - pcloudmsg.header.stamp).toSec();
-    
-    //if (fabs(tdiff) < .15){
+      double tdiff = (skelmsg.header.stamp - pcloudmsg.header.stamp).toSec();
+    double tdiff2 = (imgmsg.header.stamp - pcloudmsg.header.stamp).toSec();
+    double tdiff3 = (pointingmsg.header.stamp - skelmsg.header.stamp).toSec();
+    double tdiff4 = (pointingmsg.header.stamp - pcloudmsg.header.stamp).toSec();
+     
+
+      if (fabs(tdiff) < .15 && fabs(tdiff2) < .15  && fabs(tdiff3) < .15  && fabs(tdiff4) < .15 ){
       lastskelseq = skelmsg.header.seq;
       lastcloudseq = pcloudmsg.header.seq;
+      lastimgseq = imgmsg.header.seq;
+      lastpointingseq = pointingmsg.header.seq;
       ProcessData(skelmsg, pcloudmsg);
-      //}
+      }
 
 
   }
@@ -209,8 +221,8 @@ public:
     
 
     //
-    cv_bridge::CvImageConstPtr imgptr;
-    imgptr = cv_bridge::toCvShare ( imgmsg, enc::BGR8 );
+    cv_bridge::CvImagePtr imgptr;
+    imgptr = cv_bridge::toCvCopy ( imgmsg, enc::BGR8 );
     cv::Mat img = imgptr->image.clone();
 
 
@@ -221,11 +233,11 @@ public:
 
     std::stringstream filename;
     filename.str("");
-    if ( kqmsg.data )
+    if ( pointingmsg.is_pointing )
       {
 	int fingertip_x, fingertip_y;
-	fingertip_x = (int ) ( pmsg.x / constant / pmsg.z + centerX );
-	fingertip_y = (int ) ( pmsg.y / constant / pmsg.z + centerY );
+	fingertip_x = (int ) ( pointingmsg.fingertip.x / constant / pointingmsg.fingertip.z + centerX );
+	fingertip_y = (int ) ( pointingmsg.fingertip.y / constant / pointingmsg.fingertip.z + centerY );
 
 	cv::circle( img, cv::Point(u,v), r, cv::Scalar(0,255,0),2);
 	filename << "YUBISASHI";
@@ -302,7 +314,7 @@ public:
 
 
     if ( is_right )  
-      PointConversion(pmsg, center);   
+      PointConversion(pointingmsg.fingertip, center);   
     else
       center = pointToPclPoint(skel.left_hand.position);   
       
@@ -317,9 +329,9 @@ public:
 	
 	if (center.z < -0.1 ) break;
 	
-	distance = sqrt( (center.x - pmsg.x) * (center.x - pmsg.x) +
-			  (center.y - pmsg.y) * (center.y - pmsg.y) +
-			  (center.z - pmsg.z) * (center.z - pmsg.z));
+	distance = sqrt( (center.x - pointingmsg.fingertip.x) * (center.x - pointingmsg.fingertip.x) +
+			  (center.y - pointingmsg.fingertip.y) * (center.y - pointingmsg.fingertip.y) +
+			  (center.z - pointingmsg.fingertip.z) * (center.z - pointingmsg.fingertip.z));
 
 	
 	
@@ -344,16 +356,16 @@ public:
     arm1(1) = skel.right_hand.position.y - skel.right_elbow.position.y;
     arm1(2) = skel.right_hand.position.z - skel.right_elbow.position.z;
     
-    goc(0) = pmsg.x;
-    goc(1) = pmsg.y;
-    goc(2) = pmsg.z;
+    goc(0) = pointingmsg.fingertip.x;
+    goc(1) = pointingmsg.fingertip.y;
+    goc(2) = pointingmsg.fingertip.z;
     
     
     arm1*= 20; 
     huvo = goc + arm1;
 
      geometry_msgs::Polygon p1;
-     p1.points.push_back(PointToMsgPoint32( pmsg));
+     p1.points.push_back(PointToMsgPoint32( pointingmsg.fingertip));
     
      
 
@@ -401,32 +413,32 @@ public:
   void cloudcb(const sensor_msgs::PointCloud2ConstPtr &fullcloud)
   {
     pcloudmsg = *fullcloud;
-    // messageSync();
+    messageSync();
   }
   
   void skelcb(const body_msgs::SkeletonsConstPtr &skels)
   {
     skelmsg = * skels;
-    // messageSync();
+    messageSync();
   }
 
   void imgcb( const sensor_msgs::ImageConstPtr & img)
   {
-    imgmsg = img;
-    // messageSync();
+    imgmsg = *img;
+     messageSync();
   }
 
-  void pointedcb( const std_msgs::BoolConstPtr & kq)
+  void pointingcb( const hand_interaction::PointingConstPtr & pointing)
   {
-    kqmsg = *kq;
+    pointingmsg = *pointing;
     messageSync();
   }
 
-  void fingertipcb( const geometry_msgs::PointConstPtr &fgtip)
-  {
-    pmsg = *fgtip;
+  /* //void fingertipcb( const geometry_msgs::PointConstPtr &fgtip)
+  //{
+  // pmsg = *fgtip;
 
-  }
+  }*/
     
 
 };
