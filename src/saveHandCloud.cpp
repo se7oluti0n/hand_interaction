@@ -1,3 +1,11 @@
+/* This module is used for createting learing samples of the hand from camera
+   
+   Input : + The name of the folder where used for store data
+           + Sample label
+   
+	 You must 
+
+ */
 #include <boost/thread/thread.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
@@ -24,8 +32,12 @@
 #include <cstdlib>
 
 #include <cv_bridge/cv_bridge.h>
-#include <opencv/cv.h>
-#include <opencv/highgui.h>
+//#include <opencv/cv.h>
+//#include <opencv/highgui.h>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
 
 using namespace std;
 namespace enc = sensor_msgs::image_encodings;
@@ -33,27 +45,35 @@ struct HandSaver
 {
  private:
   ros::NodeHandle n_;
-  ros::Subscriber cloudsub_, skelsub_, imgsub_;
-  sensor_msgs::PointCloud2 pcloudmsg;
-  body_msgs::Skeletons skelmsg;
-  sensor_msgs::Image imgmsg;
+  ros::Subscriber cloudsub_, skelsub_, imgsub_; // Subsribe variable
+  sensor_msgs::PointCloud2 pcloudmsg; // The Pointcloud message to storage the fullcloud data
+  body_msgs::Skeletons skelmsg;       // The Skeleton message to storage Skeleton
+  sensor_msgs::Image imgmsg;          // The Image message to storage image  
   //stringstream filename;
-  std::string name;
-  int count ;
-  int lastskelseq, lastcloudseq, lastimgseq;
+  std::string name; // Name of storaging folder
+  int count ; // Count for number of frame
+  int lastskelseq, lastcloudseq, lastimgseq; // The index of last frame
   
 public:
   
+  /*
+    Initiliaze 
+
+   */
   HandSaver(std::string name_):name(name_)
     {
+      // Subscribe the Full cloud (depth) data got from Kinect, the Skeleton tracked by OpenNI, and the Color Image from Kinect 
       cloudsub_ = n_.subscribe("hand1_fullcloud", 1, &HandSaver::cloudcb, this);      
       skelsub_ = n_.subscribe("/skeletons", 1, &HandSaver::skelcb, this);
       imgsub_ = n_.subscribe("/camera/rgb/image_color",1, &HandSaver::imgcb, this);
+      
       count = 0;
-      lastskelseq = 0;
+      // The index of 3 types of data ( Fullcloud, Skeleton, Image )
+       lastskelseq = 0;
       lastcloudseq = 0;
       lastimgseq = 0;
-      skelmsg.header.seq = 0;
+      // Init the header 
+       skelmsg.header.seq = 0;
       pcloudmsg.header.seq = 0;
       imgmsg.header.seq = 0;
       string cmd;
@@ -67,18 +87,20 @@ public:
   void messageSync()
   {
     if ( skelmsg.header.seq == lastskelseq || pcloudmsg.header.seq == lastcloudseq || imgmsg.header.seq == lastimgseq)
-      return;
-
-    double tdiff = (skelmsg.header.stamp - pcloudmsg.header.stamp).toSec();
-    double tdiff2 = (skelmsg.header.stamp - imgmsg.header.stamp).toSec();
+      {
+	std::cout << "Exit" << std::endl;
+	return;
+      }
+     double tdiff = (skelmsg.header.stamp - pcloudmsg.header.stamp).toSec();
+     double tdiff2 = (skelmsg.header.stamp - imgmsg.header.stamp).toSec();
     double tdiff3 = (imgmsg.header.stamp - pcloudmsg.header.stamp).toSec();
     
-    if (fabs(tdiff) < .15 && fabs(tdiff2) < .15 && fabs(tdiff3) < .15){
-      lastskelseq = skelmsg.header.seq;
-      lastcloudseq = pcloudmsg.header.seq;
-      lastimgseq = imgmsg.header.seq;
-      ProcessData(skelmsg, pcloudmsg);
-    }
+     if (fabs(tdiff) < .15 && fabs(tdiff2) < .15 && fabs(tdiff3) < .15){
+       lastskelseq = skelmsg.header.seq;
+       lastcloudseq = pcloudmsg.header.seq;
+       lastimgseq = imgmsg.header.seq;
+       ProcessData(skelmsg, pcloudmsg);
+       }
 
 
   }
@@ -122,8 +144,8 @@ public:
   }
   void ProcessData( body_msgs::Skeletons skels, sensor_msgs::PointCloud2 cloud)
   {
-    if (skels.skeletons.size() == 0)
-      return;
+       if (skels.skeletons.size() == 0)
+	 return;
 
     std::stringstream filename;
     pcl::PointCloud<pcl::PointXYZ> handcloud;
@@ -135,13 +157,15 @@ public:
     filename.str("");
     filename << name << "/" << setfill('0') << setw(4) << count << ".txt";
     saveSkeletonsFileASCII( filename.str().c_str(), skels.skeletons[0]);
-
+    
     filename.str("");
-    filename << name << "/" << setfill('0') << setw(4) << count << ".jpg";
+    filename << name << "/" << setfill('0') << setw(8) << count << ".bmp";
     cv_bridge::CvImagePtr imgptr;
 
     imgptr = cv_bridge::toCvCopy( imgmsg, enc::BGR8);
     cv::imwrite(filename.str().c_str(), imgptr->image);
+    cv::imshow("Image", imgptr->image);
+    cv::waitKey(30);
     count++;
     std::cout << "Writed " << count << std::endl; 
 
@@ -176,7 +200,7 @@ public:
     skelmsg = *skels;
     messageSync();
 
-  }
+    }
 
 };
 

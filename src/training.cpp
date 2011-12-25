@@ -143,9 +143,14 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, std
   right_arm[1] = armin.right_hand.position.y - armin.right_elbow.position.y;
   right_arm[2] = armin.right_hand.position.z - armin.right_elbow.position.z;
   
-  origin [ 0 ] = armin.right_hand.position.x;
+  pcl::compute3DCentroid (cloudin, centroid);
+  /*  origin [ 0 ] = armin.right_hand.position.x;
   origin [ 1 ] = armin.right_hand.position.y;
   origin [ 2 ] = armin.right_hand.position.z;
+  */
+  origin [ 0 ] = centroid(0);
+  origin [ 1 ] = centroid(1);
+  origin [ 2 ] = centroid(2);
 
   arm_length = right_arm.norm();
   cout << "Arm length: " << arm_length << endl;
@@ -163,7 +168,7 @@ void getTransfromation(pcl::PointCloud<pcl::PointXYZ> &cloudin, arms &armin, std
   right_arm[1] = armin.right_hand.position.y - armin.right_elbow.position.y;  
   */
 
-   pcl::compute3DCentroid (cloudin, centroid);
+  
    // pcl::computeCovarianceMatrixNormalized(cloudin,centroid,cov);
    // pcl::eigen33 (cov, eigen_vectors, eigen_values);
 

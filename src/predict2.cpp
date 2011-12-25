@@ -29,9 +29,12 @@
 #include <cstdlib>
 
 #include <cv_bridge/cv_bridge.h>
-#include <opencv/cv.h>
-#include <opencv/highgui.h>
-
+//#include <opencv/cv.h>
+//#include <opencv/highgui.h>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
 
 
 #include "svm.h"
@@ -312,7 +315,7 @@ public:
      EIGEN_ALIGN16 Eigen::Vector3f eigen_values;
      EIGEN_ALIGN16 Eigen::Matrix3f eigen_vectors;
      Eigen::Matrix3f cov;
-     Eigen::Vector4f centroid, direction,armvector;
+     Eigen::Vector4f centroid ,armvector;
   
      Eigen::Vector3f z_axis, y_axis, x_axis, origin;
      Eigen::Affine3f transformation;
@@ -329,7 +332,15 @@ public:
      right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
 
      arm_length = right_arm.norm();
-     //pcl::compute3DCentroid (cloud, centroid);
+     pcl::compute3DCentroid (cloud, centroid);
+
+     origin [ 0 ] = centroid(0);
+     origin [ 1 ] = centroid(1);
+     origin [ 2 ] = centroid(2);
+     
+     /*origin [ 0 ] = skel.right_hand.position.x;
+     origin [ 1 ] = skel.right_hand.position.y;
+     origin [ 2 ] = skel.right_hand.position.z;*/
    //pcl::computeCovarianceMatrixNormalized(cloud,centroid,cov);
    //pcl::eigen33 (cov, eigen_vectors, eigen_values);
 
@@ -370,9 +381,7 @@ public:
    y_axis[1] = eigen_vectors( 1, 0);
    y_axis[2] = eigen_vectors( 2, 0);
    */
-     origin [ 0 ] = skel.right_hand.position.x;
-     origin [ 1 ] = skel.right_hand.position.y;
-     origin [ 2 ] = skel.right_hand.position.z;
+ 
 
 
      pcl::getTransformationFromTwoUnitVectorsAndOrigin(y_axis, z_axis, origin, transformation);
@@ -434,7 +443,7 @@ public:
 
      *********************************************/
     // vector<pcl::ModelCoefficients> coeffs;
-    coeffs.clear();
+    /*  coeffs.clear();
     pcl::ModelCoefficients tmp;
     tmp.values.push_back(0.0);
     tmp.values.push_back(0.0);
@@ -897,18 +906,7 @@ public:
   }  
   void cloudcb( const sensor_msgs::PointCloud2ConstPtr &scan )
   {
-    /*if ( scan)
-      {  pcl::PointCloud<pcl::PointXYZ> handcloud;
-    std::stringstream filename;
-    pcloudmsg = *scan;
-    pcl::fromROSMsg( pcloudmsg, handcloud);
-    filename.str("");
-    filename << "data/" << name << count << ".pcd";
-    pcl::io::savePCDFileASCII( filename.str().c_str(), handcloud );
-    count++;
-      }
 
-    */
 
     pcloudmsg = *scan;
     messageSync();
