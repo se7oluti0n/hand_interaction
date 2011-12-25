@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.4.6)
 include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
-
+#find_package(OpenCV 2.3.1 REQUIRED)
 # Set the build type.  Options are:
 #  Coverage       : w/ debug symbols, w/o optimization, w/ code-coverage
 #  Debug          : w/ debug symbols, w/o optimization
@@ -33,6 +33,9 @@ rosbuild_genmsg()
 rosbuild_add_executable(analyzehands src/analyze_hands.cpp)
 target_link_libraries(analyzehands pcl_utils)
 
+rosbuild_add_executable(calibration src/calibration.cpp)
+target_link_libraries(calibration pcl_utils)
+
 rosbuild_add_executable(pointing src/pointing_area.cpp)
 target_link_libraries(pointing pcl_utils)
 
@@ -53,8 +56,11 @@ target_link_libraries(saver pcl_utils)
 #rosbuild_add_executable(predict src/predict.cpp src/svm.cpp)
 #target_link_libraries(predict pcl_utils)
 
-rosbuild_add_executable(predict2 src/predict2.cpp src/svm.cpp)
-target_link_libraries(predict2 pcl_utils)
+rosbuild_add_executable(predict src/predict2.cpp src/svm.cpp)
+target_link_libraries(predict pcl_utils)
+
+rosbuild_add_executable(yubisashi src/yubisashi.cpp src/svm.cpp)
+target_link_libraries(yubisashi pcl_utils)
 
 
 
