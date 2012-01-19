@@ -55,6 +55,7 @@
 
 #include "svm.h"
 using namespace std;
+using namespace cv;
 namespace enc = sensor_msgs::image_encodings;
 struct arms
 {
@@ -232,8 +233,11 @@ struct HandSaver
   struct hostent *host;
   
   */
+
+  Mat cameraMatrix, distCoeffs, rotation_vector, translation_vector;
+  string input_file;
 public:
-  int maxx,maxy, minx, miny;
+  int maxx,maxy, minx, miny, handx, handy;
   int isPointing;
   
   HandSaver(std::string name_, int saveChoice, string folder, int onl = 1, int prob =  1):foldername(folder), name(name_), predict_probability(prob), max_nr_attr(64), save(saveChoice)
@@ -290,12 +294,25 @@ public:
 	prob_estimates = (double *) malloc(nr_class*sizeof(double));
 	isPointing = 0;
 	
+	input_file = "ExtrinsicParameters.yml";
+	load_camera_parameters( input_file, cameraMatrix, distCoeffs, rotation_vector, translation_vector);
+	
 	cout << "Initilization complete." << endl;
 	
 	//	initNetwork();
 	
   
     }
+
+  void load_camera_parameters( string input_file, Mat& cameraMat, Mat& distCo, Mat& rvec, Mat & tvec)
+  {
+    FileStorage fs(input_file, FileStorage::READ);
+    fs["camera_matrix"] >> cameraMat;
+    fs["distortion_coefficients"] >> distCo;
+    fs["rotation_vector"] >> rvec;
+    fs["translation_vector"] >> tvec;
+    
+  }
 
   sensor_msgs::Image getImagemsg()
   {
@@ -906,10 +923,20 @@ public:
     u = (int ) ( skels.skeletons[0].right_hand.position.x / constant / skels.skeletons[0].right_hand.position.z + centerX ); 
     v = (int ) ( skels.skeletons[0].right_hand.position.y / constant / skels.skeletons[0].right_hand.position.z + centerY ); 
     r = (int ) ( radius / constant / skels.skeletons[0].right_hand.position.z); 
+
+
+    vector<Point3f> realpoints2;
+    vector<Point2f> imagePoints2;
+
     
     pthread_mutex_lock(&mutex1);
     isPointing = 0;
     pthread_mutex_unlock(&mutex1);
+    
+    realpoints2.clear();
+    imagePoints2.clear();
+
+    realpoints2.push_back(cv::Point3f( - skels.skeletons[0].right_hand.position.x, skels.skeletons[0].right_hand.position.y, skels.skeletons[0].right_hand.position.z ));
     
     filename.str("");
     if ( kq == 1 )
@@ -930,17 +957,22 @@ public:
 	pcl::PointXYZ min_pt, max_pt, huvo;
 	if ( extractPointedArea( fullcloud, skels.skeletons[0], 1, min_pt, max_pt, huvo ) )
 	   {
+	     
+	     realpoints2.push_back(cv::Point3f(- min_pt.x, min_pt.y, min_pt.z));
+	     realpoints2.push_back(cv::Point3f(- max_pt.x, max_pt.y, max_pt.z));
+
 
 	     //isPointing = 1;
+	     
+	     	
 	     pthread_mutex_lock(&mutex1);
 	     isPointing = 1;
-	     
+	     pthread_mutex_unlock(&mutex1);
 	     minx = (int ) ( min_pt.x / constant / min_pt.z + centerX );
 	     miny = (int ) ( min_pt.y / constant / min_pt.z + centerY );
 	     maxx = (int ) ( max_pt.x / constant / max_pt.z + centerX );
 	     maxy = (int ) ( max_pt.y / constant / max_pt.z + centerY );
-
-	     pthread_mutex_unlock(&mutex1);
+	     
 	   
 	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(minx, miny),  cv::Scalar(0, 0, 255), 2 );
 	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(maxx, maxy),  cv::Scalar(0, 0, 255), 2 );
@@ -950,14 +982,19 @@ public:
 
 	else
 	  {
+
+	    	
+	pthread_mutex_lock(&mutex1);
+	isPointing = 2;
+	pthread_mutex_unlock(&mutex1);
 	    int vocucx, vocucy;
 	    
 	    vocucx = (int ) ( huvo.x / constant / (abs(huvo.z)) + centerX );
 	    vocucy = (int ) ( huvo.y / constant / (abs(huvo.z)) + centerY );
 	    
+	    realpoints2.push_back(cv::Point3f( - huvo.x, huvo.y, abs(huvo.z)));
 	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(vocucx, vocucy),  cv::Scalar(0, 0, 255), 2 );
 	  }
-
 
 	pos++;
       }
@@ -972,6 +1009,31 @@ public:
      
 	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,0,255), 1);
       }
+
+    	projectPoints(Mat(realpoints2), rotation_vector, translation_vector, cameraMatrix, distCoeffs, imagePoints2);
+
+	
+	pthread_mutex_lock(&mutex1);
+	handx = (int) imagePoints2[0].x;
+	handy = (int) imagePoints2[0].y;
+	
+	if (isPointing == 1)
+	  {
+	    minx = (int) imagePoints2[1].x;
+	    miny = (int) imagePoints2[1].y;
+	    maxx = (int) imagePoints2[2].x;
+	    maxy = (int) imagePoints2[2].y;
+	    
+	    
+	   }
+	else
+	  if ( isPointing == 2){
+	    minx = (int) imagePoints2[1].x;
+	    miny = (int) imagePoints2[1].y;
+	  }
+	
+	pthread_mutex_unlock(&mutex1);
+
     
     filename.str("");
     filename << "Frame: " << count;
@@ -982,7 +1044,7 @@ public:
    
    
     cv::imshow("Hand Detect", img);
-    //cv::waitKey(10);
+    cv::waitKey(20);
    
     // If enable save result to image file
     if ( save != 0 ) 
@@ -1069,7 +1131,7 @@ int main( int argc, char ** argv )
     }
   HandSaver  saver(name, save, folder, online, prob);
   pthread_t thread_for_image, thread_for_pointing;
-  pthread_create(&thread_for_image, NULL, &func_for_image, &saver);
+  //pthread_create(&thread_for_image, NULL, &func_for_image, &saver);
   pthread_create(&thread_for_pointing, NULL, &func_for_pointing, &saver);
   ros::spin();
 
@@ -1274,6 +1336,9 @@ void* func_for_pointing(void *arg)
    int minx = saver->minx;
    int maxy = saver->maxy;
    int maxx = saver->maxx;
+   int handx = saver->handx;
+   int handy = saver->handy;
+   
   while(1) {
     /* listen & select */
     
@@ -1295,8 +1360,8 @@ void* func_for_pointing(void *arg)
       
                
       // cout << "Pointing Detection Server : ";
-      nRcv = recv( connected, recvData, 24, 0);
-      if ( nRcv > 0 )
+       nRcv = recv( connected, recvData, 24, 0);
+       if ( nRcv > 0 )
 	{
 	  recvData[nRcv] = '\0';
 	  cout << "Pointing Detection Server : Recevied Signal : " << recvData << endl;
@@ -1305,25 +1370,31 @@ void* func_for_pointing(void *arg)
 	       close(connected);
 	       break;
 	      
-	    }
+	       }
 	   
-	  if( strcmp( recvData, "Get Finger" ) == 0 ){
-
-	     isPointing = saver->isPointing;
-	     miny = saver->miny;
-	     minx = saver->minx;
-	     maxy = saver->maxy;
-	     maxx = saver->maxx;
-	    
-	     cout << "IsPointing :  " << isPointing << endl;
-	      bSize = sizeof(int) * 5;
+	   if( strcmp( recvData, "Get Finger" ) == 0 ){
+      
+	      pthread_mutex_lock(&mutex1);
+	      isPointing = saver->isPointing;
+	      miny  = saver->miny;
+	      minx  = saver->minx;
+	      maxy  = saver->maxy;
+	      maxx  = saver->maxx;
+	      handx = saver->handx;
+	      handy = saver->handy;
+	      pthread_mutex_unlock(&mutex1);
+	      cout << "IsPointing :  " << isPointing << endl;
+	      bSize = sizeof(int) * 7;
 
 	      memcpy(send_buffer                  , &isPointing, sizeof(int));
-	      memcpy(send_buffer + sizeof(int)    , &minx,       sizeof(int));
-	      memcpy(send_buffer + sizeof(int) * 2, &minx,       sizeof(int));
+	      memcpy(send_buffer + sizeof(int)    , &handx,      sizeof(int));
+	      memcpy(send_buffer + sizeof(int) * 2, &handy,      sizeof(int));
 	      memcpy(send_buffer + sizeof(int) * 3, &minx,       sizeof(int));
-	      memcpy(send_buffer + sizeof(int) * 4, &minx,       sizeof(int));
-      
+	      memcpy(send_buffer + sizeof(int) * 4, &miny,       sizeof(int));
+	      memcpy(send_buffer + sizeof(int) * 5, &maxx,       sizeof(int));
+	      memcpy(send_buffer + sizeof(int) * 6, &maxy,       sizeof(int));
+
+	      
       
       
       
@@ -1335,16 +1406,16 @@ void* func_for_pointing(void *arg)
 		  break;
 	  
 		}
-	      else
-		cv:: waitKey(20);
+	      sleep(0.01);
+	      	
 
 	      cout << "Pointing Detection Server : Sent " << ++counts << " times" << endl;
 
 	    
-	  } // end if
-	  
-	   
-	}    
+	      } // end if
+	    
+     	}
+	    
     }
   }
   close(sock);

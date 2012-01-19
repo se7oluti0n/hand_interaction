@@ -74,6 +74,7 @@ private:
   vector<Mat> rvecs, tvecs;
   vector<float> reprojErrs;
   double totalAvgErr;
+  string outputFilename;
 
   float aspectRatio;
   int flag;
@@ -105,6 +106,7 @@ public:
     aspectRatio = 1.f;
     flag = 0;
     totalAvgErr = 0;
+    outputFilename = "ExtrinsicParameters.yml";
   }
   
   ~Calibration()
@@ -309,15 +311,22 @@ public:
 	 rvecs.push_back(Mat::zeros(3,1,CV_64F));
 	 tvecs.push_back(Mat::zeros(3,1,CV_64F));
 
+	 
 
 	   cv::imwrite("corrKinect.jpg", kinectImg);
 	   cv::imwrite("corrIP.jpg", ipImg);
-	 runCalibration(cv::Size(320, 240), aspectRatio, flag, cameraMatrix, distCoeffs, rvecs, tvecs, reprojErrs, totalAvgErr, false);
+	   bool ok;
+	 ok = runCalibration(cv::Size(320, 240), aspectRatio, flag, cameraMatrix, distCoeffs, rvecs, tvecs, reprojErrs, totalAvgErr, false);
 	 for (int i = 1; i < 10; i++)
 
-	   runCalibration(cv::Size(320, 240), aspectRatio, flag, cameraMatrix, distCoeffs, rvecs, tvecs, reprojErrs, totalAvgErr, true);
+	   ok = runCalibration(cv::Size(320, 240), aspectRatio, flag, cameraMatrix, distCoeffs, rvecs, tvecs, reprojErrs, totalAvgErr, true);
 
 
+	  if( ok )
+	    saveCameraParams( outputFilename, cv::Size(320, 240), cameraMatrix, distCoeffs,
+                         rvecs[0], tvecs[0], totalAvgErr );
+	  else 
+	    ros::shutdown();
 	        
        cv::namedWindow("Test IP Camera", 1);
        cv::namedWindow("Test Kinect RGB", 1);
@@ -481,10 +490,29 @@ bool runCalibration(
 
     cout << "Total Average Error: " << totalAvgErr << endl;
   
-
-
+    if ( totalAvgErr > 6.f ) ok = false;
+    
     return ok;
   }
+
+void saveCameraParams( const string& filename,
+                       Size imageSize, 
+                       const Mat& cameraMatrix, const Mat& distCoeffs,
+                       const Mat rvec, const Mat& tvec,
+                       double totalAvgErr )
+{
+    FileStorage fs( filename, FileStorage::WRITE );
+ 
+    fs << "image_width" << imageSize.width;
+    fs << "image_height" << imageSize.height;
+     
+    fs << "camera_matrix" << cameraMatrix;
+    fs << "distortion_coefficients" << distCoeffs;
+
+    fs << "avg_reprojection_error" << totalAvgErr;
+    fs << "rotation_vector" << rvec;
+    fs << "translation_vector" << tvec;
+}
   
 };
 
