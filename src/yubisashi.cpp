@@ -57,6 +57,13 @@
 using namespace std;
 using namespace cv;
 namespace enc = sensor_msgs::image_encodings;
+
+char key;
+bool object_selected = false;
+bool started = false; 
+int detected_num = 0;
+
+void onMouseClick( int event, int x, int y, int flag, void * param);
 struct arms
 {
   body_msgs::SkeletonJoint left_hand;
@@ -212,6 +219,8 @@ struct HandSaver
   struct svm_model *model;
   int predict_probability;
   stringstream filename;
+
+  fstream pointingError;
   std::string name, foldername;
   int count, pos, neg ;
   int save;
@@ -237,6 +246,11 @@ struct HandSaver
   Mat cameraMatrix, distCoeffs, rotation_vector, translation_vector;
   string input_file;
 public:
+
+  cv::Mat kinectImg;
+  pcl::PointXYZ objectPosition;
+  //vector<Point2f> ipPoints, kinectPoints;
+  pcl::PointCloud<pcl::PointXYZ> objectCloud, objectCloud2;
   int maxx,maxy, minx, miny, handx, handy;
   int isPointing;
   
@@ -297,11 +311,13 @@ public:
 	input_file = "ExtrinsicParameters.yml";
 	load_camera_parameters( input_file, cameraMatrix, distCoeffs, rotation_vector, translation_vector);
 	
+	//	pointingError.open("pointingError.csv", fstream::app);
+	
 	cout << "Initilization complete." << endl;
 	
 	//	initNetwork();
 	
-  
+	
     }
 
   void load_camera_parameters( string input_file, Mat& cameraMat, Mat& distCo, Mat& rvec, Mat & tvec)
@@ -327,6 +343,7 @@ public:
     if ( predict_probability )
     free(prob_estimates);
     //    close(sock);
+    //  pointingError.close();
   }
 
 
@@ -434,7 +451,20 @@ public:
     a.right_elbow = skel.right_elbow;
   }
 
+ int check_3d_position(int x, int y, pcl::PointXYZ &p)
+  {
+     pcl::PointCloud<pcl::PointXYZ> cloud;
+     pcl::fromROSMsg( fcloudmsg, cloud);
 
+     p = cloud.at(x, y);
+     // p.x = - (p.x);
+     
+     cout << "2D: " << x << " " << y << "  >>  3D: " << p.x << " " << " " << p.y << " " << p.z << endl;
+     if (p.z == NULL )
+       return 0;
+     else 
+       return 1;
+  }
   void extractFeatures( pcl::PointCloud<pcl::PointXYZ> cloud2, arms &skel, hand_interaction::Pointing &pointing )
   {
     pcl::PointCloud<pcl::PointXYZ>  output, cloud, fingertip;
@@ -611,7 +641,7 @@ public:
 
     float fingertip_z = max_pt.z - (max_pt.z - min_pt.z) / 6;
     
-     for ( int i = 0; i < output.points.size(); i++ )
+     for (unsigned int i = 0; i < output.points.size(); i++ )
       {
 	if ( output.points[i].z > fingertip_z ) 
 	  fingertip.points.push_back(output.points[i]);
@@ -720,7 +750,7 @@ public:
    *
    *
    */
-  int extractPointedArea( sensor_msgs::PointCloud2  &cloudin, body_msgs::Skeleton skel, int is_right,  pcl::PointXYZ &min_pt, pcl::PointXYZ &max_pt, pcl::PointXYZ &vocuc  )
+  int extractPointedArea( sensor_msgs::PointCloud2  &cloudin, body_msgs::Skeleton skel, int is_right,  pcl::PointXYZ &min_pt, pcl::PointXYZ &max_pt, pcl::PointXYZ &vocuc, pcl::PointXYZ &pointPos, pcl::PointXYZ &detected_center  )
   {
 
     //cout << "Extracting....." << is_right << endl;
@@ -759,6 +789,7 @@ public:
 	
 	
 	NNN(fullcloud, center, inds, search_radius);
+	pointPos = center;
 
 	if ( inds.size() > maxPointNumber )
 	  {
@@ -809,7 +840,9 @@ public:
 
 	pcl::compute3DCentroid (detected, centroid);
 	p1.points.push_back(eigenToMsgPoint32(centroid));
-
+	detected_center.x = centroid(0);
+	detected_center.y = centroid(1);
+	detected_center.z = centroid(2);
       }
 
     pcl::toROSMsg( detected, pointed_area );
@@ -954,10 +987,26 @@ public:
 	cv::putText( img, filename.str(), cv::Point(u,v - r - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 1);
 
 
-	pcl::PointXYZ min_pt, max_pt, huvo;
-	if ( extractPointedArea( fullcloud, skels.skeletons[0], 1, min_pt, max_pt, huvo ) )
+	pcl::PointXYZ min_pt, max_pt, huvo, pointPos, detected_center;
+	if ( extractPointedArea( fullcloud, skels.skeletons[0], 1, min_pt, max_pt, huvo, pointPos, detected_center ) )
 	   {
 	     
+	     if (started  && detected_num < 101)  
+	       {
+		 objectCloud.push_back(pointPos);
+		 objectCloud2.push_back(detected_center);
+		 detected_num ++;
+		 
+		 cout << "Added : " << detected_num << endl;
+		 if (detected_num  == 100){
+		   pointingError.open("pointingError.csv", fstream::out);
+		   // pcl::PointXYZ rHand;
+		   //rHand = pointToPclPoint(
+		   errorCompute(skels.skeletons[0].right_hand.position);
+		   pointingError.close();
+		   key = 'q';
+		 }
+	       }
 	     realpoints2.push_back(cv::Point3f(- min_pt.x, min_pt.y, min_pt.z));
 	     realpoints2.push_back(cv::Point3f(- max_pt.x, max_pt.y, max_pt.z));
 
@@ -1042,10 +1091,33 @@ public:
     filename << "FPS: " << fps;
     cv::putText( img, filename.str(), cv::Point(10,80), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,255,0), 2);
    
-   
+    cv::namedWindow("Hand Detect", 1);
     cv::imshow("Hand Detect", img);
-    cv::waitKey(20);
+    key = cv::waitKey(20);
    
+    if ( key == 's'){
+      //  cvDestroyWindow("Hand Detect");
+      objectCloud.clear();
+      objectCloud2.clear();
+      //  getObjectPosition(img);
+      kinectImg = img.clone();
+      object_selected = false;
+    
+      cvSetMouseCallback("Hand Detect", &onMouseClick, this);
+	
+      while ( key != 'q' && (!object_selected) )
+	{
+	  cv::imshow("Hand Detect", kinectImg);
+	  key = cv::waitKey(20);
+	  // cout << "Key = " << key << endl;
+	}
+	
+      cvDestroyWindow("Hand Detect");
+  
+    }
+    else
+        if ( key == 'c')
+	  started = true;
     // If enable save result to image file
     if ( save != 0 ) 
       {
@@ -1060,6 +1132,65 @@ public:
 	cv::imwrite(filename.str().c_str(), imgptr->image);
       }
   }
+
+  void errorCompute(geometry_msgs::Point p)
+  {
+    cout << "Start Calculate" << endl; 
+
+    Mat error1(1, 100, CV_64F);
+    Mat error2(1, 100, CV_64F);
+    
+
+    // Calculate the Distance from user selected point to Detected Pointing center
+    for (unsigned int i = 0; i < 100; i++ )
+      {
+	error1.at<double> (0, i) = sqrt((objectPosition.x - objectCloud[i].x)*(objectPosition.x - objectCloud[i].x) + 
+					(objectPosition.y - objectCloud[i].y) * (objectPosition.y - objectCloud[i].y) + 	
+					(objectPosition.z - objectCloud[i].z) * (objectPosition.z - objectCloud[i].z));
+
+	error2.at<double> (0, i) = sqrt((objectPosition.x - objectCloud2[i].x)*(objectPosition.x - objectCloud2[i].x) + 
+					(objectPosition.y - objectCloud2[i].y) * (objectPosition.y - objectCloud2[i].y) + 
+					(objectPosition.z - objectCloud2[i].z) * (objectPosition.z - objectCloud2[i].z));
+      }
+
+    cout << "Mat created " << endl;
+    Mat mean1, stddev1, mean2, stddev2;
+
+    // Calculate Mean and Stddev of all 100 examples
+    cv::meanStdDev(error1, mean1, stddev1);
+    cv::meanStdDev(error2, mean2, stddev2);
+    
+
+    // Output to file
+    //pointingError << "Object Position" << objectPosition << endl;
+    //    pointingError << "Hand Position" << 
+    //pointingError << "Pointing pos: Mean:  " <<  mean1.at<double> (0, 0) << "StdDev:  " <<  stddev1.at<double> (0, 0) << endl; 
+    //pointingError << "Detected Center: Mean  " <<  mean2.at<double> (0, 0) << "StdDev:  " <<  stddev2.at<double> (0, 0) << endl;
+    
+    
+    cout << "Mean Rows:" << mean1.rows << " Cols: " << mean1.cols << " " <<  "StdDev Rows:" << stddev1.rows << " Cols: " << stddev1.cols << endl; 
+    pointingError << objectPosition.x << ", " << objectPosition.y << ", " << objectPosition.z <<", " << p.x << ", " << p.y << ", " << p.z << ", "  << mean1.at<double> (0, 0) << ", " << stddev1.at<double> (0, 0) << ", " << mean2.at<double> (0, 0) << ", " << stddev2.at<double> (0, 0) << endl; 
+                 
+    started = false;  
+    detected_num = 0;
+  }
+  void getObjectPosition(cv::Mat& img)
+  {
+    kinectImg = img.clone();
+    object_selected = false;
+    cv::namedWindow("Select Object", 1);
+    cvSetMouseCallback("Select Object", &onMouseClick, this);
+	
+    while ( key != 'q' && (!object_selected) )
+      {
+	cv::imshow("Select Object", img);
+	key = cv::waitKey(20);
+	cout << "Key = " << key << endl;
+      }
+	
+    cvDestroyWindow("Select Object");
+  }
+
 
   void fcloudcb( const sensor_msgs::PointCloud2ConstPtr &scan)
   {
@@ -1420,4 +1551,28 @@ void* func_for_pointing(void *arg)
   }
   close(sock);
   return NULL;
+}
+
+void onMouseClick( int event, int x, int y, int flag,  void * param)
+{
+  HandSaver * data = (HandSaver *) param;
+  switch( event )
+    {
+    case CV_EVENT_LBUTTONDOWN:
+      
+      //data->kinectPoints.push_back(cv::Point2f(x,y));
+      pcl::PointXYZ p;
+      if ( data->check_3d_position( x, y, p)){
+	data->objectPosition = p;
+	object_selected = true;
+	cv::circle(data->kinectImg, cv::Point(x,y),1, cv::Scalar(0, 255, 0), 2);
+      }
+      else
+	{
+	cv::circle(data->kinectImg, cv::Point(x,y),1, cv::Scalar(0, 0, 255), 2);
+	object_selected = false;
+	}
+      break;
+      
+    }
 }
