@@ -159,7 +159,7 @@ public:
     saveSkeletonsFileASCII( filename.str().c_str(), skels.skeletons[0]);
     
     filename.str("");
-    filename << name << "/" << setfill('0') << setw(8) << count << ".bmp";
+    filename << name << "/" << setfill('0') << setw(8) << count << ".jpg";
     cv_bridge::CvImagePtr imgptr;
 
     imgptr = cv_bridge::toCvCopy( imgmsg, enc::BGR8);
