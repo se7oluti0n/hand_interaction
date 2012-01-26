@@ -312,7 +312,7 @@ public:
 	load_camera_parameters( input_file, cameraMatrix, distCoeffs, rotation_vector, translation_vector);
 	
 	//	pointingError.open("pointingError.csv", fstream::app);
-	
+	pointingError.open("pointingError.csv", fstream::out);
 	cout << "Initilization complete." << endl;
 	
 	//	initNetwork();
@@ -343,7 +343,7 @@ public:
     if ( predict_probability )
     free(prob_estimates);
     //    close(sock);
-    //  pointingError.close();
+    pointingError.close();
   }
 
 
@@ -999,11 +999,11 @@ public:
 		 
 		 cout << "Added : " << detected_num << endl;
 		 if (detected_num  == 100){
-		   pointingError.open("pointingError.csv", fstream::out);
+		   
 		   // pcl::PointXYZ rHand;
 		   //rHand = pointToPclPoint(
 		   errorCompute(skels.skeletons[0].right_hand.position);
-		   pointingError.close();
+		   //		   pointingError.close();
 		   key = 'q';
 		 }
 	       }
@@ -1017,11 +1017,16 @@ public:
 	     pthread_mutex_lock(&mutex1);
 	     isPointing = 1;
 	     pthread_mutex_unlock(&mutex1);
-	     minx = (int ) ( min_pt.x / constant / min_pt.z + centerX );
-	     miny = (int ) ( min_pt.y / constant / min_pt.z + centerY );
-	     maxx = (int ) ( max_pt.x / constant / max_pt.z + centerX );
-	     maxy = (int ) ( max_pt.y / constant / max_pt.z + centerY );
+	     int tmpx1, tmpx2, tmpy1, tmpy2;
+	     tmpx1 = (int ) ( min_pt.x / constant / min_pt.z + centerX );
+	     tmpy1 = (int ) ( min_pt.y / constant / min_pt.z + centerY );
+	     tmpx2 = (int ) ( max_pt.x / constant / max_pt.z + centerX );
+	     tmpy2 = (int ) ( max_pt.y / constant / max_pt.z + centerY );
 	     
+	     minx = (tmpx1 < tmpx2)?tmpx1:tmpx2;
+	     maxx = (tmpx1 > tmpx2)?tmpx1:tmpx2;
+	     miny = (tmpy1 < tmpy2)?tmpy1:tmpy2;
+	     maxy = (tmpy1 > tmpy2)?tmpy1:tmpy2;
 	   
 	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(minx, miny),  cv::Scalar(0, 0, 255), 2 );
 	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(maxx, maxy),  cv::Scalar(0, 0, 255), 2 );
@@ -1133,6 +1138,13 @@ public:
       }
   }
 
+  /*\brief : Calculate the error between selected point and detected point
+   *
+   *
+   *
+   *
+   *
+   */
   void errorCompute(geometry_msgs::Point p)
   {
     cout << "Start Calculate" << endl; 
@@ -1261,9 +1273,9 @@ int main( int argc, char ** argv )
        std::cin >> folder;
     }
   HandSaver  saver(name, save, folder, online, prob);
-  pthread_t thread_for_image, thread_for_pointing;
+  //pthread_t thread_for_image, thread_for_pointing;
   //pthread_create(&thread_for_image, NULL, &func_for_image, &saver);
-  pthread_create(&thread_for_pointing, NULL, &func_for_pointing, &saver);
+  //  pthread_create(&thread_for_pointing, NULL, &func_for_pointing, &saver);
   ros::spin();
 
   return 0;
@@ -1565,11 +1577,11 @@ void onMouseClick( int event, int x, int y, int flag,  void * param)
       if ( data->check_3d_position( x, y, p)){
 	data->objectPosition = p;
 	object_selected = true;
-	cv::circle(data->kinectImg, cv::Point(x,y),1, cv::Scalar(0, 255, 0), 2);
+	cv::circle(data->kinectImg, cv::Point(x,y),2, cv::Scalar(0, 255, 0), 2);
       }
       else
 	{
-	cv::circle(data->kinectImg, cv::Point(x,y),1, cv::Scalar(0, 0, 255), 2);
+	cv::circle(data->kinectImg, cv::Point(x,y),2, cv::Scalar(0, 0, 255), 2);
 	object_selected = false;
 	}
       break;
