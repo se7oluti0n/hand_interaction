@@ -1,0 +1,74 @@
+Training file : 17343 samples
+Negative dataset 1 : 406 samples --> 3663
+Negative dataset 2 : 378 samples --> 3411
+Negative dataset 3 : 315 samples --> 2844
+Positive dataset 1 : 318 samples --> 2871
+Positive dataset 2 : 505 samples --> 4554 
+1:
+-s 0 -t 2  -b 1 -v 5 data.txt
+Cross Validation : 80.8511%
+Test
+
+./svm-train -s 0 -t 2 -c 0.1  -b 1 -v 5 data.txt
+Cross Validation : 80.2226 %
+
+./svm-train -s 0 -t 2 -g 0.5  -b 1 -v 5 data.txt
+Cross Validation : 84.5067 %
+
+./svm-train -s 0 -t 2 -g 2  -b 1 -v 5 data.txt
+Cross Validation : 87.9375 %
+
+./svm-train -s 0 -t 2 -c 10 -g 2 -b 1 -v 5 data.txt
+Cross Validation : 91.7431 %
+
+./svm-train -s 0 -t 2 -g 8  -b 1 -v 5 data.txt
+./Cross Validation 92.4696 %
+Test pp : 78.3154 %
+Test N2 : 73.2353 %
+Test N1 : 89.2915 %
+Test P1 : 81.9697
+Test P2 : 79.0459
+
+Test Near : 85.9605 %
+Test Far :  75.7599 %
+
+ ./svm-train -s 0 -t 2 -c 10 -g 10 -b 1 -v 5 data.txt
+Cross Validation 95.6697 %
+
+
+/svm-train -s 0 -t 2 -c 10 -g 40 -b 1 -v 5 data.txt
+Cross Validation 97.8262 %
+
+Test PP : 80.233 %
+Test N1 : 94.0565
+Test N2 : 80.12 %
+Test P1 : 76.3922 %
+Test P2 : 69.6649 %
+
+Test Far : 75.5774 %
+Test Near : 86.0203 %
+
+/svm-train -s 0 -t 2 -g 40 -b 1 -v 5 data.txt
+Cross Validation 96.206 %
+
+Test Far : 76.3437 %
+Test Near : 86.5071 %
+P2 : 72.9403 %
+N2 : 78.95806 %
+P1 : 76.3045 %
+N1 : 95.0277 %
+PP : 80.233 %
+-s 1 -t 2 
+
+Current
+
+Test Near: 82.318 %
+Test Far: 73.7019 %
+PP : 80.1792%
+
+./svm-train -s 0 -t 2 -c 0.01 -g 40 -b 1 -v 5 data.txt
+Cross Validation Accuracy = 89.3848 %
+
+PP : 79.1756 %
+Test Near : 82.7887 %
+Test Far : 74.6689 %
