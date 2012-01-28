@@ -210,12 +210,17 @@ struct HandSaver
   body_msgs::Skeletons skelmsg;
   sensor_msgs::Image imgmsg;
 
-  geometry_msgs::Point finger_point;
+  geometry_msgs::Point finger_point, rightHandPosition, rightElbowPosition;
   
   std::vector<struct feature> frame;
   struct feature x;
   int max_nr_attr;
   
+  std::vector<geometry_msgs::Point> fingertips;
+  std::vector<geometry_msgs::Point> rightHands;
+  std::vector<geometry_msgs::Point> rightElbows;
+  int pastFrameNumber;
+
   struct svm_model *model;
   int predict_probability;
   stringstream filename;
@@ -251,10 +256,12 @@ public:
   pcl::PointXYZ objectPosition;
   //vector<Point2f> ipPoints, kinectPoints;
   pcl::PointCloud<pcl::PointXYZ> objectCloud, objectCloud2;
-  int maxx,maxy, minx, miny, handx, handy;
+  int maxx,maxy, minx, miny;
+  int handx, handy;
+  int object_x[8], object_y[8];
   int isPointing;
   
-  HandSaver(std::string name_, int saveChoice, string folder, int onl = 1, int prob =  1):foldername(folder), name(name_), predict_probability(prob), max_nr_attr(64), save(saveChoice)
+  HandSaver(std::string name_, int saveChoice, string folder, int onl = 1, int prob =  1, int frameNumber = 0):foldername(folder), name(name_), predict_probability(prob), max_nr_attr(64), save(saveChoice)
     {
       fCloudsub_ = n_.subscribe("/camera/rgb/points",1, &HandSaver::fcloudcb, this);
       cloudsub_ = n_.subscribe("hand1_fullcloud", 1, &HandSaver::cloudcb, this);      
@@ -264,6 +271,7 @@ public:
       detepub_[0] = n_.advertise<sensor_msgs::PointCloud2> ("right_detected", 1);
       laserpub_ = n_.advertise<mapping_msgs::PolygonalMap> ("laser", 1);
 
+      pastFrameNumber = frameNumber;
       count = 0;
       pos = 0;
       neg = 0;
@@ -484,10 +492,20 @@ public:
       
      
      resample(cloud2, cloud, skel);
+     
      right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
      right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
      right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
 
+     rightHandPosition = skel.right_hand.position;
+     rightElbowPosition = skel.right_elbow.position;
+
+     /// Average right hand and elbow position
+     if (pastFrameNumber > 0) 
+       {
+	 averagePoints(rightHands, rightHandPosition);
+	 averagePoints(rightElbows, rightElbowPosition);
+       }
      arm_length = right_arm.norm();
      pcl::compute3DCentroid (cloud, centroid);
 
@@ -677,6 +695,10 @@ public:
      PointConversion(global_centroid, finger_point);
      //fingerpub_.publish(
      
+     if (pastFrameNumber > 0)
+       averagePoints(fingertips, finger_point);
+
+     // get Average of past 9 finger point position 
      pointing.fingertip = finger_point;
      
      for ( int i = 0; i < 240; i++ )
@@ -689,6 +711,31 @@ public:
      x.ft[240].index = -1;
      averageFrame();
 
+  }
+
+  void averagePoints(std::vector<geometry_msgs::Point> & _points, geometry_msgs::Point & _p)
+  {
+    std::vector<geometry_msgs::Point>::iterator it;
+    it = _points.begin();
+    it = _points.insert(it, _p);
+    if (_points.size() > pastFrameNumber ) _points.pop_back(); 
+ 
+    geometry_msgs::Point sum;
+    sum.x = 0; sum.y = 0; sum.z = 0;
+    for (int i = 0; i < _points.size(); i++ )
+      {
+	sum.x += _points[i].x;
+	sum.y += _points[i].y;
+	sum.z += _points[i].z;
+      }
+    
+    sum.x /= _points.size();
+    sum.y /= _points.size();
+    sum.z /= _points.size();
+
+    _p.x = sum.x;
+    _p.y = sum.y;
+    _p.z = sum.z;
   }
 
     void averageFrame()
@@ -775,11 +822,17 @@ public:
       {
 	tmp = center;
 
-	if ( is_right )
+	/*	if ( is_right )
 	  center = addVector(tmp, skel.right_elbow.position, skel.right_hand.position, 0.5);
 	else
 	  center = addVector(tmp, skel.left_elbow.position, skel.left_hand.position, 0.5);
-	
+	*/
+
+	if ( is_right )
+	  center = addVector(tmp, rightElbowPosition, rightHandPosition, 0.5);
+	else
+	  center = addVector(tmp, skel.left_elbow.position, skel.left_hand.position, 0.5);
+
 	if (center.z < -0.1 ) break;
 	
 	distance = sqrt( (center.x - pointingmsg.fingertip.x) * (center.x - pointingmsg.fingertip.x) +
@@ -1008,7 +1061,15 @@ public:
 		 }
 	       }
 	     realpoints2.push_back(cv::Point3f(- min_pt.x, min_pt.y, min_pt.z));
+	     realpoints2.push_back(cv::Point3f(- max_pt.x, min_pt.y, min_pt.z));
+	     realpoints2.push_back(cv::Point3f(- min_pt.x, max_pt.y, min_pt.z));
+	     realpoints2.push_back(cv::Point3f(- max_pt.x, max_pt.y, min_pt.z));
+	     
+	     realpoints2.push_back(cv::Point3f(- min_pt.x, min_pt.y, max_pt.z));
+	     realpoints2.push_back(cv::Point3f(- max_pt.x, min_pt.y, max_pt.z));
+	     realpoints2.push_back(cv::Point3f(- min_pt.x, max_pt.y, max_pt.z));
 	     realpoints2.push_back(cv::Point3f(- max_pt.x, max_pt.y, max_pt.z));
+	     //realpoints2.push_back(cv::Point3f(- max_pt.x, max_pt.y, max_pt.z));
 
 
 	     //isPointing = 1;
@@ -1017,21 +1078,47 @@ public:
 	     pthread_mutex_lock(&mutex1);
 	     isPointing = 1;
 	     pthread_mutex_unlock(&mutex1);
-	     int tmpx1, tmpx2, tmpy1, tmpy2;
-	     tmpx1 = (int ) ( min_pt.x / constant / min_pt.z + centerX );
-	     tmpy1 = (int ) ( min_pt.y / constant / min_pt.z + centerY );
-	     tmpx2 = (int ) ( max_pt.x / constant / max_pt.z + centerX );
-	     tmpy2 = (int ) ( max_pt.y / constant / max_pt.z + centerY );
+	     int tmpx[8], tmpy[8];
+	     tmpx[0] = (int ) ( min_pt.x / constant / min_pt.z + centerX );
+	     tmpx[1] = (int ) ( max_pt.x / constant / min_pt.z + centerX );
+	     tmpx[2] = (int ) ( min_pt.x / constant / max_pt.z + centerX );
+	     tmpx[3] = (int ) ( max_pt.x / constant / max_pt.z + centerX );
+
+	     tmpy[0] = (int ) ( min_pt.y / constant / min_pt.z + centerY );
+	     tmpy[1] = (int ) ( max_pt.y / constant / min_pt.z + centerY );
+	     tmpy[2] = (int ) ( min_pt.y / constant / max_pt.z + centerY );
+	     tmpy[3] = (int ) ( max_pt.y / constant / max_pt.z + centerY );
+
 	     
-	     minx = (tmpx1 < tmpx2)?tmpx1:tmpx2;
+	     
+	     /*   minx = (tmpx1 < tmpx2)?tmpx1:tmpx2;
 	     maxx = (tmpx1 > tmpx2)?tmpx1:tmpx2;
 	     miny = (tmpy1 < tmpy2)?tmpy1:tmpy2;
 	     maxy = (tmpy1 > tmpy2)?tmpy1:tmpy2;
-	   
-	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(minx, miny),  cv::Scalar(0, 0, 255), 2 );
-	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(maxx, maxy),  cv::Scalar(0, 0, 255), 2 );
-	     cv::rectangle( img, cv::Point(minx, miny), cv::Point( maxx, maxy), cv::Scalar(255, 0, 0), 2);
+	     */
+	     //  cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(minx, miny),  cv::Scalar(0, 0, 255), 2 );
+	     // cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(maxx, maxy),  cv::Scalar(0, 0, 255), 2 );
+	     //cv::rectangle( img, cv::Point(minx, miny), cv::Point( maxx, maxy), cv::Scalar(255, 0, 0), 2);
 
+	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(tmpx[0], tmpy[0]),  cv::Scalar(0, 0, 255), 2 );
+	     cv::line( img, cv::Point( fingertip_x, fingertip_y ),  cv::Point(tmpx[3], tmpy[3]),  cv::Scalar(0, 0, 255), 2 );
+
+	     cv::line( img, cv::Point( tmpx[0], tmpy[0] ), cv::Point( tmpx[0], tmpy[1] ),  cv::Scalar(255, 0, 0), 2 );
+	     cv::line( img, cv::Point( tmpx[0], tmpy[0] ), cv::Point( tmpx[1], tmpy[0] ),  cv::Scalar(255, 0, 0), 2 );
+	     cv::line( img, cv::Point( tmpx[0], tmpy[0] ), cv::Point( tmpx[2], tmpy[2] ),  cv::Scalar(255, 0, 0), 2 );
+	    
+	     cv::line( img, cv::Point( tmpx[1], tmpy[1] ), cv::Point( tmpx[0], tmpy[1] ),  cv::Scalar(255, 0, 0), 2 );
+	     cv::line( img, cv::Point( tmpx[1], tmpy[1] ), cv::Point( tmpx[1], tmpy[0] ),  cv::Scalar(255, 0, 0), 2 );
+	     cv::line( img, cv::Point( tmpx[1], tmpy[1] ), cv::Point( tmpx[3], tmpy[3] ),  cv::Scalar(255, 0, 0), 2 );
+
+	     cv::line( img, cv::Point( tmpx[2], tmpy[3] ), cv::Point( tmpx[0], tmpy[1] ),  cv::Scalar(255, 0, 0), 2 );
+	     cv::line( img, cv::Point( tmpx[2], tmpy[3] ), cv::Point( tmpx[3], tmpy[3] ),  cv::Scalar(255, 0, 0), 2 );
+	     cv::line( img, cv::Point( tmpx[2], tmpy[3] ), cv::Point( tmpx[2], tmpy[2] ),  cv::Scalar(255, 0, 0), 2 );
+
+	     cv::line( img, cv::Point( tmpx[3], tmpy[2] ), cv::Point( tmpx[2], tmpy[2] ),  cv::Scalar(255, 0, 0), 2 );
+	     cv::line( img, cv::Point( tmpx[3], tmpy[2] ), cv::Point( tmpx[1], tmpy[0] ),  cv::Scalar(255, 0, 0), 2 );
+	     cv::line( img, cv::Point( tmpx[3], tmpy[2] ), cv::Point( tmpx[3], tmpy[3] ),  cv::Scalar(255, 0, 0), 2 );
+	     
 	   }
 
 	else
@@ -1078,6 +1165,11 @@ public:
 	    maxx = (int) imagePoints2[2].x;
 	    maxy = (int) imagePoints2[2].y;
 	    
+	    for (int obj_i = 0; obj_i < 8; obj_i++)
+	      {
+		object_x[obj_i] = imagePoints2[obj_i+1].x;
+		object_y[obj_i] = imagePoints2[obj_i+1].y;
+	      }
 	    
 	   }
 	else
@@ -1259,9 +1351,11 @@ int main( int argc, char ** argv )
   ros::init( argc, argv, "predict");
   ros::NodeHandle n;
   std::string name, folder;
-  int save = 0, online = 1, prob;
+  int save = 0, online = 1, prob, frameNumber = 0;
   std::cout << "Please input the Hand MODEL filename: ";
   std::cin >> name;
+  std::cout << "Please input past frame Number to smooth error: ";
+  std::cin >> frameNumber;
   std::cout << "Using probability predict? : ";
   std::cin >> prob;
   
@@ -1272,10 +1366,10 @@ int main( int argc, char ** argv )
       std::cout << "Input folder name to save: ";
        std::cin >> folder;
     }
-  HandSaver  saver(name, save, folder, online, prob);
-  //pthread_t thread_for_image, thread_for_pointing;
+  HandSaver  saver(name, save, folder, online, prob, frameNumber);
+  pthread_t  thread_for_pointing;
   //pthread_create(&thread_for_image, NULL, &func_for_image, &saver);
-  //  pthread_create(&thread_for_pointing, NULL, &func_for_pointing, &saver);
+  pthread_create(&thread_for_pointing, NULL, &func_for_pointing, &saver);
   ros::spin();
 
   return 0;
@@ -1527,16 +1621,18 @@ void* func_for_pointing(void *arg)
 	      handy = saver->handy;
 	      pthread_mutex_unlock(&mutex1);
 	      cout << "IsPointing :  " << isPointing << endl;
-	      bSize = sizeof(int) * 7;
+	      bSize = sizeof(int) * 19;
 
 	      memcpy(send_buffer                  , &isPointing, sizeof(int));
 	      memcpy(send_buffer + sizeof(int)    , &handx,      sizeof(int));
 	      memcpy(send_buffer + sizeof(int) * 2, &handy,      sizeof(int));
-	      memcpy(send_buffer + sizeof(int) * 3, &minx,       sizeof(int));
+	      /* memcpy(send_buffer + sizeof(int) * 3, &minx,       sizeof(int));
 	      memcpy(send_buffer + sizeof(int) * 4, &miny,       sizeof(int));
 	      memcpy(send_buffer + sizeof(int) * 5, &maxx,       sizeof(int));
 	      memcpy(send_buffer + sizeof(int) * 6, &maxy,       sizeof(int));
-
+	      */
+	      memcpy(send_buffer + sizeof(int) * 3, saver->object_x,       sizeof(int)*8);
+	      memcpy(send_buffer + sizeof(int) * 11,saver->object_y,       sizeof(int)*8);
 	      
       
       
