@@ -144,11 +144,12 @@ struct HandSaver
   double *prob_estimates;
   int online;
 
+  int enable_resample, frame_smooth;
   
   
 public:
   
-  HandSaver(std::string name_, int saveChoice, string folder, int onl = 1, int prob =  1):foldername(folder), name(name_), predict_probability(prob), max_nr_attr(64), save(saveChoice), online(onl)
+  HandSaver(std::string name_, int saveChoice, string folder, int onl = 1, int prob =  1, int resamp = 1, int frame_smt = 10 ):foldername(folder), name(name_), predict_probability(prob), max_nr_attr(64), save(saveChoice), online(onl), enable_resample(resamp), frame_smooth(frame_smt)
     {
       if (online)
 	{
@@ -325,8 +326,10 @@ public:
      //viewer.showCloud(cloud2);
      sensor_msgs::PointCloud2 trans1, trans2;
       
-     
-     resample(cloud2, cloud, skel);
+     if (enable_resample)
+       resample(cloud2, cloud, skel);
+     else
+       cloud = cloud2;
      right_arm[0] = skel.right_hand.position.x - skel.right_elbow.position.x;
      right_arm[1] = skel.right_hand.position.y - skel.right_elbow.position.y;
      right_arm[2] = skel.right_hand.position.z - skel.right_elbow.position.z;
@@ -573,7 +576,8 @@ public:
       // tcout << histogram[i] << endl;
     }
      x.ft[240].index = -1;
-     averageFrame();
+     if (frame_smooth)
+       averageFrame();
 
   }
 
@@ -582,7 +586,7 @@ public:
     std::vector<struct feature>::iterator it;
     it = frame.begin();
     it = frame.insert(it, x);
-    if (frame.size() > 9 ) frame.pop_back(); 
+    if (frame.size() > frame_smooth ) frame.pop_back(); 
     for (int j = 0; j < 240; j++ )
       { 
 	float sum = 0.0;
@@ -888,7 +892,8 @@ public:
    
 	 
 	 cv::imshow("Hand Detect", img);
-	 while ( cv::waitKey(0) == -1 );
+	 //while ( cv::waitKey(0) == -1 );
+	 cv::waitKey(20);
 	 if ( save != 0 ) 
 	   {
  
@@ -935,6 +940,8 @@ int main( int argc, char ** argv )
   ros::init( argc, argv, "predict");
   ros::NodeHandle n;
   std::string name, folder;
+  int enable_resample = 1;
+  int frame_smooth = 10;
   int save = 0, online = 1, prob;
   std::cout << "Please input the Hand MODEL filename: ";
   std::cin >> name;
@@ -950,7 +957,11 @@ int main( int argc, char ** argv )
     }
   std::cout << "Processing ONLINE? : ";
   std::cin >> online;
-  HandSaver  saver(name, save, folder, online, prob);
+  std::cout << "Enable Resampling: ";
+  std::cin >> enable_resample;
+  std::cout << "Number of smooth frame: ";
+  std::cin >> frame_smooth;
+  HandSaver  saver(name, save, folder, online, prob, enable_resample, frame_smooth);
   if ( online ) ros::spin();
 
   return 0;
