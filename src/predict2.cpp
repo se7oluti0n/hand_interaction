@@ -56,7 +56,7 @@ struct feature
 vector<pcl::ModelCoefficients> coeffs;
 //vector<vtkSmartPointer< vtkPolyData >> circles; 
 boost::mt19937 gen;
-pcl::visualization::CloudViewer viewer("Cloud Viewer");
+//  pcl::visualization::CloudViewer viewer("Cloud Viewer");
 pcl::PointCloud<pcl::PointXYZ> cylinder_cloud;
 pcl::PointXYZ ff;
 //boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("Features Visual Viewer"));
@@ -134,7 +134,9 @@ struct HandSaver
   int predict_probability;
   
   stringstream filename;
-  std::string name, foldername;
+  std::string  foldername;
+  char name[256];
+  int show_3d, show_image;
   int count, pos, neg ;
   int save;
   int lastskelseq, lastcloudseq, lastimgseq;
@@ -146,10 +148,11 @@ struct HandSaver
 
   int enable_resample, frame_smooth;
   
+
   
 public:
   
-  HandSaver(std::string name_, int saveChoice, string folder, int onl = 1, int prob =  1, int resamp = 1, int frame_smt = 10 ):foldername(folder), name(name_), predict_probability(prob), max_nr_attr(64), save(saveChoice), online(onl), enable_resample(resamp), frame_smooth(frame_smt)
+  HandSaver(char *_name, int saveChoice, int onl = 1, int prob =  1, int resamp = 1, int frame_smt = 10, int _show_3d = 1, int _show_image = 1 ): predict_probability(prob), max_nr_attr(64), save(saveChoice), online(onl), enable_resample(resamp), frame_smooth(frame_smt), show_3d(_show_3d), show_image(_show_image)
     {
       if (online)
 	{
@@ -160,6 +163,7 @@ public:
 	  pointingpub_ = n_.advertise<hand_interaction::Pointing> ("pointing_info", 1);
 	  //fingerpub_ = n_.advertise<geometry_msgs::Point> ("fingertip", 1);
 	}
+      strcpy( name, _name);
       count = 0;
       pos = 0;
       neg = 0;
@@ -174,7 +178,7 @@ public:
       cmd = "mkdir " + foldername;
       system(cmd.c_str());
       
-      if ((model = svm_load_model(name.c_str())) == 0 )
+      if ((model = svm_load_model(name)) == 0 )
       {
 	cerr << "Can't open input file " << name << endl; 
 	exit(1);
@@ -484,48 +488,50 @@ public:
     //  visual(output.makeShared(), coeffs);
 
     float zzz = min_pt.z;
-    cylinder_cloud.points.clear();
-    for (int i = 0; i < 7; i++, zzz+= offset_z )
-      {
+    if (show_3d){
+      cylinder_cloud.points.clear();
+      for (int i = 0; i < 7; i++, zzz+= offset_z )
+	{
 
-	float orr = r / 5.0;
-	float radiuss = orr;
-	for ( int j = 0; j < 5; j++, radiuss += orr)
-	  {
-	    for (float angle(0.0); angle <= 360.0; angle += 5.0)
-	      {
-		pcl::PointXYZ basic_point;
-		basic_point.x =  radiuss * cosf (pcl::deg2rad(angle));
-		basic_point.y =  radiuss * sinf (pcl::deg2rad(angle));
-		basic_point.z = zzz;
-		cylinder_cloud.points.push_back(basic_point); 
-	      }
-	  }
+	  float orr = r / 5.0;
+	  float radiuss = orr;
+	  for ( int j = 0; j < 5; j++, radiuss += orr)
+	    {
+	      for (float angle(0.0); angle <= 360.0; angle += 5.0)
+		{
+		  pcl::PointXYZ basic_point;
+		  basic_point.x =  radiuss * cosf (pcl::deg2rad(angle));
+		  basic_point.y =  radiuss * sinf (pcl::deg2rad(angle));
+		  basic_point.z = zzz;
+		  cylinder_cloud.points.push_back(basic_point); 
+		}
+	    }
 
-	orr = r / 25.0;
-	 for (float angle(0.0); angle <= 360.0; angle += 45.0)
-	      {
-		for (radiuss = 0; radiuss <= r; radiuss+= orr)
-		  {
-		pcl::PointXYZ basic_point;
-		basic_point.x =  radiuss * cosf (pcl::deg2rad(angle));
-		basic_point.y =  radiuss * sinf (pcl::deg2rad(angle));
-		basic_point.z = zzz;
-		cylinder_cloud.points.push_back(basic_point); 
-		  }
-	      }
+	  orr = r / 25.0;
+	  for (float angle(0.0); angle <= 360.0; angle += 45.0)
+	    {
+	      for (radiuss = 0; radiuss <= r; radiuss+= orr)
+		{
+		  pcl::PointXYZ basic_point;
+		  basic_point.x =  radiuss * cosf (pcl::deg2rad(angle));
+		  basic_point.y =  radiuss * sinf (pcl::deg2rad(angle));
+		  basic_point.z = zzz;
+		  cylinder_cloud.points.push_back(basic_point); 
+		}
+	    }
 
 	
-      }
-    cylinder_cloud.width = cylinder_cloud.points.size();
-    cylinder_cloud.height = cylinder_cloud.points.size();
+	}
+      cylinder_cloud.width = cylinder_cloud.points.size();
+      cylinder_cloud.height = cylinder_cloud.points.size();
 
 
-    if (output.is_dense)
-      {
-	viewer.showCloud(output.makeShared());
-	viewer.runOnVisualizationThreadOnce(visual);
-      }
+      if (output.is_dense)
+	{
+	  //	  viewer.showCloud(output.makeShared());
+	  //viewer.runOnVisualizationThreadOnce(visual);
+	}
+    }
     /*************************************************/
 
     float fingertip_z = max_pt.z - (max_pt.z - min_pt.z) / 6;
@@ -812,7 +818,7 @@ public:
     ifstream pcdin("PCDfileList");
     ifstream skelin("SkelFileList");
     ifstream imgin("ImageFileList"); 
-    ofstream out("trainingdata.txt");
+    ofstream out("predict.log", ios_base::app);
     while ( ! pcdin.eof() )
       {
 	
@@ -885,15 +891,20 @@ public:
 	   }
     
 	 std::cout << "Sum : " << count << " Positive : " << pos << " Negative : " << neg << std::endl;
+
+	 
+	 
+	 
 	 filename.str("");
 	 filename << "Positive: " << pos << " / " <<  count;
 	 cv::putText( img, filename.str(), cv::Point(10,50), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,255,0), 2);
 	 filename.str("");
-   
-	 
-	 cv::imshow("Hand Detect", img);
-	 //while ( cv::waitKey(0) == -1 );
-	 cv::waitKey(20);
+	 if (show_image)
+	   {
+	     cv::imshow("Hand Detect", img);
+	     //while ( cv::waitKey(0) == -1 );
+	     cv::waitKey(0);
+	   }
 	 if ( save != 0 ) 
 	   {
  
@@ -908,6 +919,13 @@ public:
 	   }
 
       }
+
+    float p_acc = (float) pos / (float) count;
+    float n_acc = (float) neg / (float) count;
+
+    out << "Model, " << name << ", Resample, " << enable_resample << ", Frame, " << frame_smooth << ", Negative, " << n_acc << ", Positive, " << p_acc << endl;
+
+    out.close();
   }  
   void cloudcb( const sensor_msgs::PointCloud2ConstPtr &scan )
   {
@@ -939,15 +957,66 @@ int main( int argc, char ** argv )
 
   ros::init( argc, argv, "predict");
   ros::NodeHandle n;
-  std::string name, folder;
+  char name[256];
   int enable_resample = 1;
   int frame_smooth = 10;
-  int save = 0, online = 1, prob;
-  std::cout << "Please input the Hand MODEL filename: ";
+  int save = 0, online = 1, prob = 1;
+  int show_3d = 1, show_image = 1;
+  for (int i = 1; i < argc; i++ )
+    {
+      char *s = argv[i];
+      std::cout << argv[i] << std::endl;
+
+      if ( strcmp(s, "-m") == 0)
+	{
+	  if( sscanf(argv[++i], "%s", name) != 1 )
+	    return fprintf(stderr, "Invalid model file name");
+	}
+      else if (strcmp (s, "-ol") == 0)
+	{
+	   if( sscanf(argv[++i], "%u", &online) != 1 )
+	    return fprintf(stderr, "Invalid online parameter");
+
+	}
+      else if (strcmp (s, "-rs") == 0)
+	{
+	   if( sscanf(argv[++i], "%u", &enable_resample) != 1 )
+	    return fprintf(stderr, "Invalid resample parameter");
+	}
+      else if (strcmp (s, "-f") == 0)
+	{
+	   if( sscanf(argv[++i], "%u", &frame_smooth) != 1 )
+	    return fprintf(stderr, "Invalid frame smooth  parameter");
+	}
+      else if (strcmp (s, "-b") == 0)
+	{
+	   if( sscanf(argv[++i], "%u", &prob) != 1 )
+	    return fprintf(stderr, "Invalid prob  parameter");
+	}
+      else if (strcmp (s, "-show_3d") == 0)
+	{
+	   if( sscanf(argv[++i], "%u", &show_3d) != 1 )
+	    return fprintf(stderr, "Invalid 3d parameter");
+	}
+      else if (strcmp (s, "-show_img") == 0)
+	{
+	   if( sscanf(argv[++i], "%u", &show_image) != 1 )
+	    return fprintf(stderr, "Invalid show image parameter");
+	}
+      
+    }
+
+  std::cout << "Model file: " << name << " Online: " << online << std::endl 
+            << " Resample: " << " Frame Smooth: " << frame_smooth << std::endl
+            << " Show 3d: "  << show_3d << " Show Image :  " << show_image
+	    << std::endl;
+  /*
+ std::cout << "Please input the Hand MODEL filename: ";
   std::cin >> name;
   std::cout << "Using probability predict? : ";
   std::cin >> prob;
-  
+ 
+ 
   // std::cout << "Would you like to save data? ( 0 for No, 1 for false positive, 2 for false nagative ): ";
   //std::cin >> save;
   if ( save != 0 ) 
@@ -960,9 +1029,9 @@ int main( int argc, char ** argv )
   std::cout << "Enable Resampling: ";
   std::cin >> enable_resample;
   std::cout << "Number of smooth frame: ";
-  std::cin >> frame_smooth;
-  HandSaver  saver(name, save, folder, online, prob, enable_resample, frame_smooth);
+  std::cin >> frame_smooth;*/
+  HandSaver  saver(name, save, online, prob, enable_resample, frame_smooth, show_3d, show_image);
   if ( online ) ros::spin();
-
+ 
   return 0;
 }

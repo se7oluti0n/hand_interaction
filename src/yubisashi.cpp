@@ -225,6 +225,10 @@ struct HandSaver
   int predict_probability;
   stringstream filename;
 
+  int sock;
+  char totalBuff[300000];
+  int nTotalsize;
+  //int lastnetworkseq, currentseq, lastcloudseq;
   fstream pointingError;
   std::string name, foldername;
   int count, pos, neg ;
@@ -260,6 +264,9 @@ public:
   int handx, handy;
   int object_x[8], object_y[8];
   int isPointing;
+  int startWriteVideo;
+
+  cv::VideoWriter videoWriter;
   
   HandSaver(std::string name_, int saveChoice, string folder, int onl = 1, int prob =  1, int frameNumber = 0):foldername(folder), name(name_), predict_probability(prob), max_nr_attr(64), save(saveChoice)
     {
@@ -267,6 +274,7 @@ public:
       cloudsub_ = n_.subscribe("hand1_fullcloud", 1, &HandSaver::cloudcb, this);      
       skelsub_ = n_.subscribe("/skeletons", 1, &HandSaver::skelcb, this);
       imgsub_  = n_.subscribe("/camera/rgb/image_color", 1, &HandSaver::imgcb, this);
+      startWriteVideo = 0;
 
       detepub_[0] = n_.advertise<sensor_msgs::PointCloud2> ("right_detected", 1);
       laserpub_ = n_.advertise<mapping_msgs::PolygonalMap> ("laser", 1);
@@ -316,6 +324,8 @@ public:
 	prob_estimates = (double *) malloc(nr_class*sizeof(double));
 	isPointing = 0;
 	
+
+	videoWriter.open("video.avi", CV_FOURCC('M', 'J', 'P', 'G'), 15, cv::Size(640, 480));
 	input_file = "ExtrinsicParameters.yml";
 	load_camera_parameters( input_file, cameraMatrix, distCoeffs, rotation_vector, translation_vector);
 	
@@ -327,6 +337,8 @@ public:
 	
 	
     }
+
+
 
   void load_camera_parameters( string input_file, Mat& cameraMat, Mat& distCo, Mat& rvec, Mat & tvec)
   {
@@ -743,7 +755,7 @@ public:
     std::vector<struct feature>::iterator it;
     it = frame.begin();
     it = frame.insert(it, x);
-    if (frame.size() > 9 ) frame.pop_back(); 
+    if (frame.size() > 10 ) frame.pop_back(); 
     for (int j = 0; j < 240; j++ )
       { 
 	float sum = 0.0;
@@ -1187,9 +1199,13 @@ public:
     filename.str("");
     filename << "FPS: " << fps;
     cv::putText( img, filename.str(), cv::Point(10,80), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,255,0), 2);
-   
+    //   cv::Mat ipImg = cv::imdecode(cv::Mat(1, nTotalsize, CV_8UC1, totalBuff ), 1);
+    
+    if ( startWriteVideo )
+      videoWriter << img;
     cv::namedWindow("Hand Detect", 1);
     cv::imshow("Hand Detect", img);
+    //    cv::imshow("Network Camera", iPimg)
     key = cv::waitKey(20);
    
     if ( key == 's'){
@@ -1317,6 +1333,7 @@ public:
     imgmsg = *img;
     pthread_mutex_unlock(&mutex1);
     //    send_data();
+    //    recvIPCamera();
     messageSync();
 
   }
@@ -1592,6 +1609,7 @@ void* func_for_pointing(void *arg)
      cout << " I got a connection from (" <<  inet_ntoa(client_addr.sin_addr) << ", " << ntohs(client_addr.sin_port) << " )" << endl;
 
     counts = 0;
+    //saver->startWriteVideo = 1;
     while(1) {
       /* send */
       
@@ -1653,11 +1671,12 @@ void* func_for_pointing(void *arg)
 	    
 	      } // end if
 	    
-     	}
+     	}// end if
 	    
-    }
-  }
-  close(sock);
+    } // end While
+    saver->startWriteVideo = 0;
+  } // end While
+  close(sock);  
   return NULL;
 }
 

@@ -264,8 +264,11 @@ int main(int argc, char ** argv)
 {
   //ros::init(argc, argv, "test");
   int classs;
+  int enable_resampling = 0;
   cout << "Input class label( 1 / 0 ): " ;
   cin >> classs;
+  cout << "Enable Resampling: ";
+  cin >> enable_resampling;
   
   
   system("ls *pcd > PCDfileList");
@@ -300,7 +303,12 @@ int main(int argc, char ** argv)
    arms aa;
    readJointFile(name, aa);
    cout << count << " : " ;
-   resample( cloud, cloud2, aa);
+   if (enable_resampling)
+     resample( cloud, cloud2, aa);
+   else
+     cloud2 = cloud;
+
+   
    getTransfromation( cloud2, aa, transformation, arm_length);
    cout << "Arm Length 2 : " << arm_length << endl;
    for ( int ll = 0; ll < transformation.size(); ll++)
